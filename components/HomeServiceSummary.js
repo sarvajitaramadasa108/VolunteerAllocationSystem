@@ -8,6 +8,8 @@ export default function HomeServiceSummary() {
 
   useEffect(() => {
     let alive = true;
+    let timerId = null;
+
     async function load() {
       try {
         const response = await fetch("/api/bridge?action=services.list", { cache: "no-store" });
@@ -20,9 +22,25 @@ export default function HomeServiceSummary() {
         if (alive) setLoading(false);
       }
     }
+
+    async function refresh() {
+      await load();
+    }
+
+    function handleFocus() {
+      void refresh();
+    }
+
     load();
+    timerId = window.setInterval(() => {
+      void refresh();
+    }, 15000);
+    window.addEventListener("focus", handleFocus);
+
     return () => {
       alive = false;
+      if (timerId) window.clearInterval(timerId);
+      window.removeEventListener("focus", handleFocus);
     };
   }, []);
 
