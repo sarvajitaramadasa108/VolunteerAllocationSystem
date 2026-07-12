@@ -17,6 +17,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [searchResult, setSearchResult] = useState(emptySearchResult);
+  const [lookupSearched, setLookupSearched] = useState(false);
   const [form, setForm] = useState({
     name: "",
     age: "",
@@ -57,6 +58,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       setMessage("Enter a mobile number");
       return;
     }
+    setLookupSearched(true);
     setSearching(true);
     setMessage("");
     try {
@@ -171,7 +173,12 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               inputMode="numeric"
               placeholder="Enter mobile number"
               value={mobile}
-              onChange={(event) => setMobile(event.target.value)}
+              onChange={(event) => {
+                setMobile(event.target.value);
+                if (mode === "lookup") {
+                  setLookupSearched(false);
+                }
+              }}
             />
           </label>
           <div className="actions">
@@ -207,21 +214,16 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <Link className="home-button" href="/">Home</Link>
                 </div>
               </>
-            ) : (
+            ) : lookupSearched ? (
               <div className="stack">
-                {mobile ? (
-                  <>
-                    <div className="notice">Mobile number not found. Please register first.</div>
-                    <div className="actions">
-                      <Link className="home-button" href="/allocate">Register</Link>
-                      <Link className="home-button" href="/">Home</Link>
-                    </div>
-                  </>
-                ) : (
-                  <div className="empty-state">
-                    <p>Search a mobile number to view your allocation.</p>
-                  </div>
-                )}
+                <div className="notice">Mobile number not found. Please register first.</div>
+                <div className="actions">
+                  <Link className="home-button" href="/">Home</Link>
+                </div>
+              </div>
+            ) : (
+              <div className="empty-state">
+                <p>Search a mobile number to view your allocation.</p>
               </div>
             )}
           </div>
