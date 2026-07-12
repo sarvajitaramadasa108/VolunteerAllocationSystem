@@ -62,6 +62,30 @@ export default function AdminDashboard() {
     }
   }
 
+  async function loadVolunteers() {
+    if (!selectedService) {
+      setMessage("Select a service first");
+      return;
+    }
+    setWorking(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "volunteers.byService", serviceName: selectedService })
+      });
+      const payload = await response.json();
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not load volunteers");
+      setRows(Array.isArray(payload.data) ? payload.data : []);
+      setMessage(`Loaded volunteers for ${selectedService}`);
+    } catch (error) {
+      setMessage(error.message || "Could not load volunteers");
+    } finally {
+      setWorking(false);
+    }
+  }
+
   function downloadExcel(list, serviceMeta) {
     const headers = [
       "S No",
@@ -129,7 +153,11 @@ export default function AdminDashboard() {
         <div className="form-grid">
           <label className="field wide">
             <span>Service</span>
-            <select value={selectedService} onChange={(event) => setSelectedService(event.target.value)}>
+            <select value={selectedService} onChange={(event) => {
+              setSelectedService(event.target.value);
+              setRows([]);
+              setMessage("");
+            }}>
               <option value="">Select a service</option>
               {services.map((service) => (
                 <option key={service.serviceName} value={service.serviceName}>
@@ -139,8 +167,8 @@ export default function AdminDashboard() {
             </select>
           </label>
           <div className="actions">
-            <button type="button" onClick={downloadVolunteers} disabled={working || loading}>
-              {working ? "Generating..." : "Get the volunteers allotted"}
+            <button type="button" onClick={loadVolunteers} disabled={working || loading}>
+              {working ? "Loading..." : "Get volunteer details"}
             </button>
           </div>
         </div>
@@ -156,7 +184,13 @@ export default function AdminDashboard() {
       <section className="panel">
         <div className="panel-head">
           <h2>Preview</h2>
-          <p className="subtle">This is the live list that will be exported.</p>
+          <div className="row-actions">
+            {rows.length ? (
+              <button type="button" onClick={() => downloadExcel(rows, selectedMeta)} disabled={working}>
+                Download as Excel
+              </button>
+            ) : null}
+          </div>
         </div>
         {rows.length ? (
           <div className="table-wrap">
