@@ -157,8 +157,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         </div>
         <nav className="topnav">
           <Link href="/">Home</Link>
-          <Link href="/allocate">Allocate</Link>
-          <Link href="/lookup">Lookup</Link>
+          {mode === "allocate" ? <Link href="/allocate">Allocate</Link> : null}
+          {mode === "allocate" ? <Link href="/lookup">Lookup</Link> : null}
         </nav>
       </header>
 
@@ -193,7 +193,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 {searchResult.allocated ? (
                   <div className="service-card">
                     <h2>Your Allocated Service</h2>
-                    <div className="service-grid">
+                    <div className="service-grid service-grid-single">
+                      <div><span>Your Allocated Service</span><strong>{searchResult.volunteer?.allocatedService || "-"}</strong></div>
                       <div><span>Your Service Coordinator Name</span><strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong></div>
                       <div><span>Your Service Coordinator Contact Number</span><strong>{searchResult.serviceDetails?.contactNumber || "-"}</strong></div>
                       <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>

@@ -169,6 +169,10 @@ button:disabled {
   gap: 12px;
 }
 
+.service-grid-single {
+  grid-template-columns: 1fr;
+}
+
 .summary-grid > div,
 .service-grid > div {
   background: #f8fafc;
