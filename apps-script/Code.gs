@@ -36,13 +36,24 @@ function setupSheets() {
 }
 
 function listServices() {
-  const rows = serviceSheet().getDataRange().getValues();
-  return rows.slice(1).map(function (row, index) {
+  const serviceRows = serviceSheet().getDataRange().getValues();
+  const masterRows = masterSheet().getDataRange().getValues();
+  const allocationCounts = {};
+  for (let i = 1; i < masterRows.length; i++) {
+    const allocatedService = String(masterRows[i][7] || "").trim();
+    if (!allocatedService) continue;
+    allocationCounts[allocatedService] = (allocationCounts[allocatedService] || 0) + 1;
+  }
+
+  return serviceRows.slice(1).map(function (row, index) {
+    const serviceName = String(row[1] || "").trim();
     return {
-      serviceName: String(row[1] || "").trim(),
+      serviceName: serviceName,
       coordinatorName: String(row[2] || "").trim(),
       contactNumber: String(row[3] || "").trim(),
       reportingTime: String(row[4] || "").trim(),
+      requiredCount: Number(row[5] || 0),
+      allocatedCount: Number(allocationCounts[serviceName] || 0),
       rowNumber: index + 2
     };
   }).filter(function (row) { return row.serviceName; });

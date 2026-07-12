@@ -1,4 +1,5 @@
 import Link from "next/link";
+import HomeServiceSummary from "@/components/HomeServiceSummary";
 
 export default function HomePage() {
   return (
@@ -22,6 +23,8 @@ export default function HomePage() {
           <p>Enter a mobile number to see the allocated service and coordinator details.</p>
         </Link>
       </section>
+
+      <HomeServiceSummary />
     </main>
   );
 }

@@ -102,6 +102,16 @@ h1 {
   margin-bottom: 16px;
 }
 
+.summary-panel {
+  margin-top: 18px;
+}
+
+.panel-head {
+  display: grid;
+  gap: 6px;
+  margin-bottom: 14px;
+}
+
 .form-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -189,6 +199,29 @@ button:disabled {
 
 .service-card {
   padding: 18px;
+}
+
+.table-wrap {
+  overflow-x: auto;
+}
+
+.summary-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.summary-table th,
+.summary-table td {
+  text-align: left;
+  padding: 10px 12px;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+}
+
+.summary-table th {
+  color: #4a6283;
+  font-size: 13px;
+  font-weight: 700;
 }
 
 .lookup-greeting h2 {
