@@ -22,6 +22,10 @@ export default function HomePage() {
           <h2>Volunteer Check</h2>
           <p>Enter a mobile number to see the allocated service and coordinator details.</p>
         </Link>
+        <Link className="card-link" href="/dashboard">
+          <h2>Dashboard</h2>
+          <p>Download the volunteers allotted for any service.</p>
+        </Link>
       </section>
 
       <HomeServiceSummary />

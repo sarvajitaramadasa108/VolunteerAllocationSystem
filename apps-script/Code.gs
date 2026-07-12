@@ -18,6 +18,7 @@ function route(action, payload) {
   if (action === "volunteers.search") return { ok: true, data: searchVolunteer(payload.mobile) };
   if (action === "volunteers.allocate") return { ok: true, data: allocateService(payload) };
   if (action === "volunteers.upsert") return { ok: true, data: upsertVolunteer(payload) };
+  if (action === "volunteers.byService") return { ok: true, data: volunteersByService(payload.serviceName) };
   if (action === "setup") return { ok: true, data: setupSheets() };
   return { ok: false, error: "Unknown action: " + action };
 }
@@ -137,6 +138,28 @@ function upsertVolunteer(payload) {
 function getServiceDetails(serviceName) {
   const service = listServices().find(function (row) { return row.serviceName === serviceName; });
   return service || null;
+}
+
+function volunteersByService(serviceName) {
+  const targetService = String(serviceName || "").trim();
+  if (!targetService) throw new Error("Select a service");
+  const rows = masterSheet().getDataRange().getValues();
+  const result = [];
+  for (let i = 1; i < rows.length; i++) {
+    const row = rows[i];
+    if (String(row[7] || "").trim() !== targetService) continue;
+    result.push({
+      rowNumber: i + 1,
+      name: String(row[1] || "").trim(),
+      mobile: String(row[2] || "").trim(),
+      gender: String(row[3] || "").trim(),
+      age: String(row[4] || "").trim(),
+      occupation: String(row[5] || "").trim(),
+      areaOfStay: String(row[6] || "").trim(),
+      allocatedService: String(row[7] || "").trim()
+    });
+  }
+  return result;
 }
 
 function mapVolunteerRow(row, rowNumber) {
