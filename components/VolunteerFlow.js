@@ -26,6 +26,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     service: ""
   });
   const canAllocate = mode === "allocate";
+  const showRegistrationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
 
   useEffect(() => {
     void loadServices();
@@ -182,7 +183,48 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       {message ? <section className="notice">{message}</section> : null}
 
       <section className="panel">
-        {searchResult.found ? (
+        {mode === "lookup" ? (
+          <div className="stack">
+            {searchResult.found ? (
+              <>
+                <div className="lookup-greeting">
+                  <h2>Hare Krishna {searchResult.volunteer?.name || ""}</h2>
+                </div>
+                {searchResult.allocated ? (
+                  <div className="service-card">
+                    <h2>Your Allocated Service</h2>
+                    <div className="service-grid">
+                      <div><span>Your Service Coordinator Name</span><strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong></div>
+                      <div><span>Your Service Coordinator Contact Number</span><strong>{searchResult.serviceDetails?.contactNumber || "-"}</strong></div>
+                      <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
+                )}
+                <div className="actions">
+                  <Link className="home-button" href="/">Home</Link>
+                </div>
+              </>
+            ) : (
+              <div className="stack">
+                {mobile ? (
+                  <>
+                    <div className="notice">Mobile number not found. Please register first.</div>
+                    <div className="actions">
+                      <Link className="home-button" href="/allocate">Register</Link>
+                      <Link className="home-button" href="/">Home</Link>
+                    </div>
+                  </>
+                ) : (
+                  <div className="empty-state">
+                    <p>Search a mobile number to view your allocation.</p>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : showRegistrationForm ? (
           <div className="stack">
             <div className="summary-grid">
               <div><span>Name</span><strong>{searchResult.volunteer?.name || "-"}</strong></div>
@@ -192,20 +234,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               <div><span>Area of Stay</span><strong>{searchResult.volunteer?.areaOfStay || "-"}</strong></div>
               <div><span>Allocated Service</span><strong>{searchResult.volunteer?.allocatedService || "Not allocated"}</strong></div>
             </div>
-
-            {mode === "lookup" && searchResult.allocated ? (
-              <div className="service-card">
-                <h2>Your Allocated Service</h2>
-                <div className="service-grid">
-                  <div><span>Your Service Coordinator Name</span><strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong></div>
-                  <div><span>Your Service Coordinator Contact Number</span><strong>{searchResult.serviceDetails?.contactNumber || "-"}</strong></div>
-                  <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>
-                </div>
-              </div>
-            ) : null}
-
-            {(searchResult.found || (!searchResult.found && mobile)) ? (
-              <form className="form-grid" onSubmit={submitAllocation}>
+            <form className="form-grid" onSubmit={submitAllocation}>
               <label className="field wide">
                 <span>Name</span>
                 <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Volunteer name" />
@@ -227,7 +256,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 <input value={form.areaOfStay} onChange={(event) => setForm((current) => ({ ...current, areaOfStay: event.target.value }))} placeholder="Area of stay" />
               </label>
               <label className="field wide">
-                <span>{canAllocate ? "Please Allocate Service" : "Service (optional if you want to allocate now)"}</span>
+                <span>Please Allocate Service</span>
                 <select value={form.service} onChange={(event) => setForm((current) => ({ ...current, service: event.target.value }))}>
                   <option value="">Select a service</option>
                   {services.map((service) => (
@@ -246,11 +275,6 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 <button type="submit" disabled={saving}>{saving ? "Saving..." : actionLabel}</button>
               </div>
             </form>
-            ) : (
-              <div className="empty-state">
-                <p>Search a mobile number to load the registration form.</p>
-              </div>
-            )}
           </div>
         ) : (
           <div className="empty-state">
