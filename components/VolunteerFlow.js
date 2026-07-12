@@ -158,7 +158,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           <p className="subtle">{intro}</p>
         </div>
         <nav className="topnav">
-          <Link href="/">Home</Link>
+          {mode === "allocate" ? <Link href="/">Home</Link> : null}
           {mode === "allocate" ? <Link href="/allocate">Allocate</Link> : null}
           {mode === "allocate" ? <Link href="/lookup">Lookup</Link> : null}
         </nav>
@@ -210,16 +210,10 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 ) : (
                   <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
                 )}
-                <div className="actions">
-                  <Link className="home-button" href="/">Home</Link>
-                </div>
               </>
             ) : lookupSearched ? (
               <div className="stack">
                 <div className="notice">Mobile number not found. Please register first.</div>
-                <div className="actions">
-                  <Link className="home-button" href="/">Home</Link>
-                </div>
               </div>
             ) : (
               <div className="empty-state">
