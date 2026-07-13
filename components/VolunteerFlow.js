@@ -162,6 +162,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           : `${successLabel} for ${normalized}`
       );
       setMobile("");
+      setLookupSearched(false);
       setSearchResult(emptySearchResult);
       setForm({
         name: "",
