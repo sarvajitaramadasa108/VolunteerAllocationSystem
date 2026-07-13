@@ -16,7 +16,7 @@ function buildDriveImageUrl(link) {
   if (/^https?:\/\//i.test(value) && value.includes("drive.google.com")) {
     const fileIdMatch = value.match(/\/d\/([a-zA-Z0-9_-]+)/) || value.match(/[?&]id=([a-zA-Z0-9_-]+)/);
     if (fileIdMatch && fileIdMatch[1]) {
-      return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+      return `https://drive.google.com/thumbnail?id=${fileIdMatch[1]}&sz=w320`;
     }
   }
   return value;
@@ -78,7 +78,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       const response = await fetch("/api/bridge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "volunteers.search", mobile: normalized })
+        body: JSON.stringify({ action: "volunteers.search", mobile: normalized, markAttendance: mode === "lookup" })
       });
       const payload = await response.json();
       if (!response.ok || payload.ok === false) throw new Error(payload.error || "Search failed");

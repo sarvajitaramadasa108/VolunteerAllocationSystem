@@ -15,7 +15,7 @@ function doPost(e) {
 
 function route(action, payload) {
   if (action === "services.list") return { ok: true, data: listServices() };
-  if (action === "volunteers.search") return { ok: true, data: searchVolunteer(payload.mobile) };
+  if (action === "volunteers.search") return { ok: true, data: searchVolunteer(payload.mobile, payload.markAttendance) };
   if (action === "volunteers.allocate") return { ok: true, data: allocateService(payload) };
   if (action === "volunteers.upsert") return { ok: true, data: upsertVolunteer(payload) };
   if (action === "volunteers.byService") return { ok: true, data: volunteersByService(payload.serviceName) };
@@ -80,10 +80,12 @@ function syncFormResponseRow(row) {
 
   let rowIndex = -1;
   let allocatedService = "";
+  let attendance = "";
   for (let i = 1; i < rows.length; i++) {
     if (normalizeMobile(rows[i][2]) === normalized) {
       rowIndex = i + 1;
       allocatedService = String(rows[i][7] || "").trim();
+      attendance = String(rows[i][8] || "").trim();
       break;
     }
   }
@@ -99,11 +101,12 @@ function syncFormResponseRow(row) {
     age,
     occupation,
     areaOfStay,
-    allocatedService
+    allocatedService,
+    attendance
   ];
 
   if (rowIndex > 0) {
-    master.getRange(rowIndex, 1, 1, 8).setValues([updatedRow]);
+    master.getRange(rowIndex, 1, 1, 9).setValues([updatedRow]);
   } else {
     master.appendRow(updatedRow);
   }
@@ -145,7 +148,7 @@ function listServices() {
   }).filter(function (row) { return row.serviceName; });
 }
 
-function searchVolunteer(mobile) {
+function searchVolunteer(mobile, markAttendance) {
   const normalized = normalizeMobile(mobile);
   if (!normalized) throw new Error("Enter a valid mobile number");
   const sheet = masterSheet();
@@ -154,6 +157,9 @@ function searchVolunteer(mobile) {
     const row = rows[i];
     if (normalizeMobile(row[2]) === normalized) {
       const allocatedService = String(row[7] || "").trim();
+      if (markAttendance) {
+        sheet.getRange(i + 1, 9).setValue("Yes");
+      }
       return {
         found: true,
         allocated: Boolean(allocatedService),
@@ -195,11 +201,12 @@ function upsertVolunteer(payload) {
     String(payload.age || "").trim(),
     String(payload.occupation || "").trim(),
     String(payload.areaOfStay || "").trim(),
-    String(payload.service || "").trim()
+    String(payload.service || "").trim(),
+    rowIndex > 0 ? String(rows[rowIndex - 1][8] || "").trim() : ""
   ];
 
   if (rowIndex > 0) {
-    sheet.getRange(rowIndex, 1, 1, 8).setValues([volunteerRow]);
+    sheet.getRange(rowIndex, 1, 1, 9).setValues([volunteerRow]);
   } else {
     sheet.appendRow(volunteerRow);
     rowIndex = sheet.getLastRow();
@@ -250,7 +257,8 @@ function mapVolunteerRow(row, rowNumber) {
     age: String(row[4] || "").trim(),
     occupation: String(row[5] || "").trim(),
     areaOfStay: String(row[6] || "").trim(),
-    allocatedService: String(row[7] || "").trim()
+    allocatedService: String(row[7] || "").trim(),
+    attendance: String(row[8] || "").trim()
   };
 }
 
@@ -271,7 +279,7 @@ function serviceSheet() {
 }
 
 function ensureMasterHeader(sheet) {
-  const headers = ["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service"];
+  const headers = ["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service", "Attendance"];
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     return;
