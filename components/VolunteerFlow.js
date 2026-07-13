@@ -10,6 +10,18 @@ const emptySearchResult = {
   serviceDetails: null
 };
 
+function buildDriveImageUrl(link) {
+  const value = String(link || "").trim();
+  if (!value) return "";
+  if (/^https?:\/\//i.test(value) && value.includes("drive.google.com")) {
+    const fileIdMatch = value.match(/\/d\/([a-zA-Z0-9_-]+)/) || value.match(/[?&]id=([a-zA-Z0-9_-]+)/);
+    if (fileIdMatch && fileIdMatch[1]) {
+      return `https://drive.google.com/uc?export=view&id=${fileIdMatch[1]}`;
+    }
+  }
+  return value;
+}
+
 export default function VolunteerFlow({ mode, title, intro, actionLabel, successLabel }) {
   const [services, setServices] = useState([]);
   const [mobile, setMobile] = useState("");
@@ -27,7 +39,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     service: ""
   });
   const canAllocate = mode === "allocate";
-  const showRegistrationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
+  const showAllocationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
+  const showLookupRegistrationForm = mode === "lookup" && lookupSearched && !searching && !searchResult.found;
 
   useEffect(() => {
     void loadServices();
@@ -82,6 +95,14 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (payload.data?.found) {
         setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet.");
       } else {
+        setForm({
+          name: "",
+          age: "",
+          gender: "",
+          occupation: "",
+          areaOfStay: "",
+          service: ""
+        });
         setMessage("Mobile number not found. Please register the volunteer.");
       }
     } catch (error) {
@@ -204,9 +225,25 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 {searchResult.allocated ? (
                   <div className="service-card">
                     <h2>Your Allocated Service</h2>
-                    <div className="service-grid service-grid-single">
+                    <div className="service-grid service-grid-single lookup-service-grid">
                       <div><span>Your Allocated Service</span><strong>{searchResult.volunteer?.allocatedService || "-"}</strong></div>
-                      <div><span>Your Service Coordinator Name</span><strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong></div>
+                      <div className="coordinator-card">
+                        <span>Your Service Coordinator Name</span>
+                        <div className="coordinator-profile">
+                          <div className="coordinator-photo-wrap">
+                            {searchResult.serviceDetails?.photoUrl ? (
+                              <img
+                                className="coordinator-photo"
+                                src={buildDriveImageUrl(searchResult.serviceDetails.photoUrl)}
+                                alt={searchResult.serviceDetails?.coordinatorName || "Coordinator photo"}
+                              />
+                            ) : (
+                              <div className="coordinator-photo coordinator-photo-placeholder">No Photo</div>
+                            )}
+                          </div>
+                          <strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong>
+                        </div>
+                      </div>
                       <div><span>Your Service Coordinator Contact Number</span><strong>{searchResult.serviceDetails?.contactNumber || "-"}</strong></div>
                       <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>
                     </div>
@@ -215,9 +252,38 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
                 )}
               </>
-            ) : lookupSearched && !searching ? (
+            ) : showLookupRegistrationForm ? (
               <div className="stack">
-                <div className="notice">Mobile number not found. Please register first.</div>
+                <div className="notice">Mobile number not found. Please register the volunteer using the form below.</div>
+                <form className="form-grid" onSubmit={submitAllocation}>
+                  <div className="field wide">
+                    <span>Mobile Number</span>
+                    <div className="readonly-value">{mobile || "-"}</div>
+                  </div>
+                  <label className="field wide">
+                    <span>Name</span>
+                    <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Volunteer name" />
+                  </label>
+                  <label className="field">
+                    <span>Age</span>
+                    <input value={form.age} onChange={(event) => setForm((current) => ({ ...current, age: event.target.value }))} placeholder="Age" />
+                  </label>
+                  <label className="field">
+                    <span>Gender</span>
+                    <input value={form.gender} onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))} placeholder="Gender" />
+                  </label>
+                  <label className="field wide">
+                    <span>College / Working</span>
+                    <input value={form.occupation} onChange={(event) => setForm((current) => ({ ...current, occupation: event.target.value }))} placeholder="College or working" />
+                  </label>
+                  <label className="field wide">
+                    <span>Area of Stay</span>
+                    <input value={form.areaOfStay} onChange={(event) => setForm((current) => ({ ...current, areaOfStay: event.target.value }))} placeholder="Area of stay" />
+                  </label>
+                  <div className="actions wide">
+                    <button type="submit" disabled={saving}>{saving ? "Saving..." : "Register Volunteer"}</button>
+                  </div>
+                </form>
               </div>
             ) : (
               <div className="empty-state">
@@ -225,7 +291,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               </div>
             )}
           </div>
-        ) : showRegistrationForm ? (
+        ) : showAllocationForm ? (
           <div className="stack">
             {searching ? (
               <div className="notice">Searching...</div>

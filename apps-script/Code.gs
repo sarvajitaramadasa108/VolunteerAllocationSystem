@@ -138,6 +138,7 @@ function listServices() {
       contactNumber: String(row[3] || "").trim(),
       reportingTime: String(row[4] || "").trim(),
       requiredCount: Number(row[5] || 0),
+      photoUrl: String(row[6] || "").trim(),
       allocatedCount: Number(allocationCounts[serviceName] || 0),
       rowNumber: index + 2
     };
@@ -184,7 +185,8 @@ function upsertVolunteer(payload) {
 
   const sheet = masterSheet();
   const rows = sheet.getDataRange().getValues();
-  const nextNo = Math.max(0, rows.length - 1) + 1;
+  const rowIndex = findVolunteerRowIndex_(rows, normalized);
+  const nextNo = rowIndex > 0 ? Number(rows[rowIndex - 1][0] || 0) : nextMasterSerial_(rows);
   const volunteerRow = [
     nextNo,
     String(payload.name || "").trim(),
@@ -196,19 +198,12 @@ function upsertVolunteer(payload) {
     String(payload.service || "").trim()
   ];
 
-  let rowIndex = -1;
-  for (let i = 1; i < rows.length; i++) {
-    if (normalizeMobile(rows[i][2]) === normalized) {
-      rowIndex = i + 1;
-      break;
-    }
-  }
-
   if (rowIndex > 0) {
     sheet.getRange(rowIndex, 1, 1, 8).setValues([volunteerRow]);
   } else {
     sheet.appendRow(volunteerRow);
     rowIndex = sheet.getLastRow();
+    appendManualRegistrationToFormResponses_(payload);
   }
 
   return {
@@ -291,7 +286,7 @@ function ensureMasterHeader(sheet) {
 }
 
 function ensureServiceHeader(sheet) {
-  const headers = ["S No", "Service Name", "Coordinator Name", "Coordinator Contact Number", "Reporting Time", "Number of Volunteers Required"];
+  const headers = ["S No", "Service Name", "Coordinator Name", "Coordinator Contact Number", "Reporting Time", "Number of Volunteers Required", "Coordinator Photo Link"];
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     return;
@@ -309,6 +304,35 @@ function formResponsesSheet() {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Form Responses 1");
   if (!sheet) throw new Error('Sheet "Form Responses 1" not found');
   return sheet;
+}
+
+function appendManualRegistrationToFormResponses_(payload) {
+  const sheet = formResponsesSheet();
+  const headers = getHeaderRow_(sheet);
+  const timestamp = Utilities.formatDate(new Date(), Session.getScriptTimeZone() || "Asia/Calcutta", "yyyy-MM-dd HH:mm:ss");
+  const row = new Array(Math.max(headers.length, 7)).fill("");
+  row[0] = timestamp;
+  row[1] = String(payload.name || "").trim();
+  row[2] = String(payload.gender || "").trim();
+  row[3] = String(payload.age || "").trim();
+  row[4] = String(payload.mobile || "").trim();
+  row[5] = String(payload.occupation || "").trim();
+  row[6] = String(payload.areaOfStay || "").trim();
+  sheet.appendRow(row);
+}
+
+function getHeaderRow_(sheet) {
+  if (!sheet || sheet.getLastRow() === 0) return [];
+  return sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+}
+
+function findVolunteerRowIndex_(rows, normalizedMobile) {
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeMobile(rows[i][2]) === normalizedMobile) {
+      return i + 1;
+    }
+  }
+  return -1;
 }
 
 function ensureFormSubmitTrigger(ss) {

@@ -272,6 +272,57 @@ button:disabled {
   margin-top: 4px;
 }
 
+.lookup-service-grid {
+  gap: 14px;
+}
+
+.coordinator-card {
+  display: grid;
+  gap: 8px;
+}
+
+.coordinator-profile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.coordinator-photo-wrap {
+  display: flex;
+  align-items: center;
+}
+
+.coordinator-photo {
+  width: clamp(56px, 16vw, 92px);
+  height: clamp(72px, 20vw, 116px);
+  object-fit: cover;
+  border-radius: 12px;
+  border: 1px solid rgba(190, 136, 67, 0.28);
+  background: #fff6e8;
+  box-shadow: 0 8px 16px rgba(126, 78, 25, 0.12);
+}
+
+.coordinator-photo-placeholder {
+  display: grid;
+  place-items: center;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.readonly-value {
+  min-height: 48px;
+  display: flex;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 12px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1px solid rgba(190, 136, 67, 0.22);
+  color: var(--text);
+  font-weight: 700;
+}
+
 .service-card {
   padding: 18px;
   background: linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(255, 240, 214, 0.95));
@@ -384,6 +435,10 @@ button:disabled {
   .summary-grid > div,
   .service-grid > div {
     padding: 10px;
+  }
+
+  .coordinator-profile {
+    grid-template-columns: 1fr;
   }
 }
 
