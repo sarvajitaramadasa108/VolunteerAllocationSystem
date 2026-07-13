@@ -145,7 +145,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         gender: form.gender,
         occupation: form.occupation,
         areaOfStay: form.areaOfStay,
-        service: form.service
+        service: form.service,
+        markAttendance: mode === "lookup"
       };
 
       const response = await fetch("/api/bridge", {

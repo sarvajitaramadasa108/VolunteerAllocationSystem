@@ -188,6 +188,7 @@ function allocateService(payload) {
 function upsertVolunteer(payload) {
   const normalized = normalizeMobile(payload.mobile);
   if (!normalized) throw new Error("Enter a valid mobile number");
+  const markAttendance = Boolean(payload.markAttendance);
 
   const sheet = masterSheet();
   const rows = sheet.getDataRange().getValues();
@@ -202,7 +203,7 @@ function upsertVolunteer(payload) {
     String(payload.occupation || "").trim(),
     String(payload.areaOfStay || "").trim(),
     String(payload.service || "").trim(),
-    rowIndex > 0 ? String(rows[rowIndex - 1][8] || "").trim() : ""
+    markAttendance ? "Yes" : (rowIndex > 0 ? String(rows[rowIndex - 1][8] || "").trim() : "")
   ];
 
   if (rowIndex > 0) {
