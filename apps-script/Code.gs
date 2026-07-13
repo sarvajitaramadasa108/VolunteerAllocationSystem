@@ -191,7 +191,7 @@ function upsertVolunteer(payload) {
 
   const sheet = masterSheet();
   const rows = sheet.getDataRange().getValues();
-  const rowIndex = findVolunteerRowIndex_(rows, normalized);
+  let rowIndex = findVolunteerRowIndex_(rows, normalized);
   const nextNo = rowIndex > 0 ? Number(rows[rowIndex - 1][0] || 0) : nextMasterSerial_(rows);
   const volunteerRow = [
     nextNo,

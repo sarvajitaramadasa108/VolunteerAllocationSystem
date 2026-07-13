@@ -22,6 +22,15 @@ function buildDriveImageUrl(link) {
   return value;
 }
 
+async function readJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text?.startsWith("<!DOCTYPE") ? "Backend returned HTML instead of JSON" : text || "Backend returned an invalid response");
+  }
+}
+
 export default function VolunteerFlow({ mode, title, intro, actionLabel, successLabel }) {
   const [services, setServices] = useState([]);
   const [mobile, setMobile] = useState("");
@@ -49,7 +58,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   async function loadServices() {
     try {
       const response = await fetch("/api/bridge?action=services.list", { cache: "no-store" });
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       setServices(Array.isArray(data.data) ? data.data : []);
     } catch {
       setServices([]);
@@ -80,7 +89,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ action: "volunteers.search", mobile: normalized, markAttendance: mode === "lookup" })
       });
-      const payload = await response.json();
+      const payload = await readJsonResponse(response);
       if (!response.ok || payload.ok === false) throw new Error(payload.error || "Search failed");
       setSearchResult(payload.data || emptySearchResult);
       setForm((current) => ({
@@ -144,10 +153,14 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload)
       });
-      const data = await response.json();
+      const data = await readJsonResponse(response);
       if (!response.ok || data.ok === false) throw new Error(data.error || "Save failed");
 
-      setMessage(`${successLabel} for ${normalized}`);
+      setMessage(
+        mode === "lookup" && !searchResult.found
+          ? "Registration successful. Please report at the desk for service allocation."
+          : `${successLabel} for ${normalized}`
+      );
       setMobile("");
       setSearchResult(emptySearchResult);
       setForm({
