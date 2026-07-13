@@ -30,7 +30,14 @@ function setupSheets() {
   const service = ss.getSheetByName(SERVICE_SHEET_NAME) || ss.insertSheet(SERVICE_SHEET_NAME);
   ensureMasterHeader(master);
   ensureServiceHeader(service);
+  ensureFormSubmitTrigger(ss);
   return true;
+}
+
+function installFormSubmitTrigger() {
+  const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
+  ensureFormSubmitTrigger(ss);
+  return { installed: true };
 }
 
 function onFormSubmit(e) {
@@ -81,8 +88,11 @@ function syncFormResponseRow(row) {
     }
   }
 
+  const serial = rowIndex > 0
+    ? Number(rows[rowIndex - 1][0] || rowIndex)
+    : nextMasterSerial_(rows);
   const updatedRow = [
-    rowIndex > 0 ? rows[rowIndex - 1][0] || rowIndex - 1 : Math.max(0, rows.length - 1) + 1,
+    serial,
     name,
     mobile,
     gender,
@@ -98,6 +108,15 @@ function syncFormResponseRow(row) {
     master.appendRow(updatedRow);
   }
   return true;
+}
+
+function nextMasterSerial_(rows) {
+  let maxSerial = 0;
+  for (let i = 1; i < rows.length; i++) {
+    const serial = Number(rows[i][0] || 0);
+    if (serial > maxSerial) maxSerial = serial;
+  }
+  return maxSerial + 1;
 }
 
 function listServices() {
@@ -290,6 +309,15 @@ function formResponsesSheet() {
   const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Form Responses 1");
   if (!sheet) throw new Error('Sheet "Form Responses 1" not found');
   return sheet;
+}
+
+function ensureFormSubmitTrigger(ss) {
+  const triggers = ScriptApp.getProjectTriggers();
+  const hasTrigger = triggers.some(function (trigger) {
+    return trigger.getHandlerFunction() === "onFormSubmit";
+  });
+  if (hasTrigger) return;
+  ScriptApp.newTrigger("onFormSubmit").forSpreadsheet(ss).onFormSubmit().create();
 }
 
 function jsonResponse(data) {
