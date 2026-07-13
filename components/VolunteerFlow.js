@@ -175,6 +175,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               value={mobile}
               onChange={(event) => {
                 setMobile(event.target.value);
+                setMessage("");
+                setSearchResult(emptySearchResult);
                 if (mode === "lookup") {
                   setLookupSearched(false);
                 }
@@ -192,7 +194,9 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       <section className="panel">
         {mode === "lookup" ? (
           <div className="stack">
-            {searchResult.found ? (
+            {searching ? (
+              <div className="notice">Searching...</div>
+            ) : searchResult.found ? (
               <>
                 <div className="lookup-greeting">
                   <h2>Hare Krishna {searchResult.volunteer?.name || ""}</h2>
@@ -211,7 +215,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
                 )}
               </>
-            ) : lookupSearched ? (
+            ) : lookupSearched && !searching ? (
               <div className="stack">
                 <div className="notice">Mobile number not found. Please register first.</div>
               </div>
@@ -223,9 +227,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           </div>
         ) : showRegistrationForm ? (
           <div className="stack">
-            {searchResult.found ? (
+            {searching ? (
+              <div className="notice">Searching...</div>
+            ) : searchResult.found ? (
               <div className="notice">Volunteer found. Edit the fields below and save the service allocation.</div>
-            ) : lookupSearched ? (
+            ) : lookupSearched && !searching ? (
               <div className="notice">Mobile number not found. Please register the volunteer using the form below.</div>
             ) : null}
             <form className="form-grid" onSubmit={submitAllocation}>

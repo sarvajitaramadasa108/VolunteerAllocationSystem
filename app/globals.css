@@ -90,8 +90,7 @@ h1, h2, h3, p {
 h1 {
   margin-bottom: 8px;
   font-size: 32px;
-  color: #fff7eb;
-  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
+  color: var(--text);
 }
 
 .hero-copy,
