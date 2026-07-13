@@ -19,6 +19,7 @@ function route(action, payload) {
   if (action === "volunteers.allocate") return { ok: true, data: allocateService(payload) };
   if (action === "volunteers.upsert") return { ok: true, data: upsertVolunteer(payload) };
   if (action === "volunteers.byService") return { ok: true, data: volunteersByService(payload.serviceName) };
+  if (action === "sync.formResponses") return { ok: true, data: syncFormResponsesToMaster() };
   if (action === "setup") return { ok: true, data: setupSheets() };
   return { ok: false, error: "Unknown action: " + action };
 }
@@ -27,16 +28,80 @@ function setupSheets() {
   const ss = SpreadsheetApp.openById(SPREADSHEET_ID);
   const master = ss.getSheetByName(MASTER_SHEET_NAME) || ss.insertSheet(MASTER_SHEET_NAME);
   const service = ss.getSheetByName(SERVICE_SHEET_NAME) || ss.insertSheet(SERVICE_SHEET_NAME);
-  if (master.getLastRow() === 0) {
-    master.appendRow(["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service"]);
+  ensureMasterHeader(master);
+  ensureServiceHeader(service);
+  return true;
+}
+
+function onFormSubmit(e) {
+  try {
+    syncFormResponseEvent(e);
+  } catch (error) {
+    console.error(error);
   }
-  if (service.getLastRow() === 0) {
-    service.appendRow(["S No", "Service Name", "Coordinator Name", "Coordinator Contact Number", "Reporting Time"]);
+}
+
+function syncFormResponsesToMaster() {
+  const sheet = formResponsesSheet();
+  const rows = sheet.getDataRange().getValues();
+  let synced = 0;
+  for (let i = 1; i < rows.length; i++) {
+    if (syncFormResponseRow(rows[i])) {
+      synced += 1;
+    }
+  }
+  return { synced: synced };
+}
+
+function syncFormResponseEvent(e) {
+  if (!e || !e.values || !e.values.length) return false;
+  return syncFormResponseRow(e.values);
+}
+
+function syncFormResponseRow(row) {
+  if (!row || !row.length) return false;
+  const master = masterSheet();
+  const rows = master.getDataRange().getValues();
+  const name = String(row[1] || "").trim();
+  const gender = String(row[2] || "").trim();
+  const age = String(row[3] || "").trim();
+  const mobile = String(row[4] || "").trim();
+  const occupation = String(row[5] || "").trim();
+  const areaOfStay = String(row[6] || "").trim();
+  const normalized = normalizeMobile(mobile);
+  if (!normalized) return false;
+
+  let rowIndex = -1;
+  let allocatedService = "";
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeMobile(rows[i][2]) === normalized) {
+      rowIndex = i + 1;
+      allocatedService = String(rows[i][7] || "").trim();
+      break;
+    }
+  }
+
+  const updatedRow = [
+    rowIndex > 0 ? rows[rowIndex - 1][0] || rowIndex - 1 : Math.max(0, rows.length - 1) + 1,
+    name,
+    mobile,
+    gender,
+    age,
+    occupation,
+    areaOfStay,
+    allocatedService
+  ];
+
+  if (rowIndex > 0) {
+    master.getRange(rowIndex, 1, 1, 8).setValues([updatedRow]);
+  } else {
+    master.appendRow(updatedRow);
   }
   return true;
 }
 
 function listServices() {
+  ensureServiceHeader(serviceSheet());
   const serviceRows = serviceSheet().getDataRange().getValues();
   const masterRows = masterSheet().getDataRange().getValues();
   const allocationCounts = {};
@@ -189,6 +254,42 @@ function masterSheet() {
 
 function serviceSheet() {
   return SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName(SERVICE_SHEET_NAME);
+}
+
+function ensureMasterHeader(sheet) {
+  const headers = ["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service"];
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    return;
+  }
+  const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+  const changed = headers.some(function (header, index) {
+    return String(current[index] || "").trim() !== header;
+  });
+  if (changed) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+}
+
+function ensureServiceHeader(sheet) {
+  const headers = ["S No", "Service Name", "Coordinator Name", "Coordinator Contact Number", "Reporting Time", "Number of Volunteers Required"];
+  if (sheet.getLastRow() === 0) {
+    sheet.appendRow(headers);
+    return;
+  }
+  const current = sheet.getRange(1, 1, 1, headers.length).getValues()[0];
+  const changed = headers.some(function (header, index) {
+    return String(current[index] || "").trim() !== header;
+  });
+  if (changed) {
+    sheet.getRange(1, 1, 1, headers.length).setValues([headers]);
+  }
+}
+
+function formResponsesSheet() {
+  const sheet = SpreadsheetApp.openById(SPREADSHEET_ID).getSheetByName("Form Responses 1");
+  if (!sheet) throw new Error('Sheet "Form Responses 1" not found');
+  return sheet;
 }
 
 function jsonResponse(data) {

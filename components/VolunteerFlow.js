@@ -223,14 +223,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           </div>
         ) : showRegistrationForm ? (
           <div className="stack">
-            <div className="summary-grid">
-              <div><span>Name</span><strong>{searchResult.volunteer?.name || "-"}</strong></div>
-              <div><span>Age</span><strong>{searchResult.volunteer?.age || "-"}</strong></div>
-              <div><span>Gender</span><strong>{searchResult.volunteer?.gender || "-"}</strong></div>
-              <div><span>College / Working</span><strong>{searchResult.volunteer?.occupation || "-"}</strong></div>
-              <div><span>Area of Stay</span><strong>{searchResult.volunteer?.areaOfStay || "-"}</strong></div>
-              <div><span>Allocated Service</span><strong>{searchResult.volunteer?.allocatedService || "Not allocated"}</strong></div>
-            </div>
+            {searchResult.found ? (
+              <div className="notice">Volunteer found. Edit the fields below and save the service allocation.</div>
+            ) : lookupSearched ? (
+              <div className="notice">Mobile number not found. Please register the volunteer using the form below.</div>
+            ) : null}
             <form className="form-grid" onSubmit={submitAllocation}>
               <label className="field wide">
                 <span>Name</span>

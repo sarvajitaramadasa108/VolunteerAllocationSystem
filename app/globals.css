@@ -2,12 +2,37 @@
   box-sizing: border-box;
 }
 
+:root {
+  color-scheme: light;
+  --bg-0: #2f1810;
+  --bg-1: #4a291d;
+  --bg-2: #6b3d2a;
+  --panel: rgba(255, 248, 235, 0.95);
+  --panel-soft: rgba(255, 243, 220, 0.92);
+  --line: rgba(190, 136, 67, 0.28);
+  --line-strong: rgba(190, 136, 67, 0.45);
+  --text: #2d1a12;
+  --muted: #6b4f3f;
+  --white: #fff8ec;
+  --accent: #d89a2f;
+  --accent-deep: #b87516;
+  --accent-2: #b7432a;
+  --shadow: 0 18px 42px rgba(31, 14, 8, 0.24);
+}
+
 html, body {
   margin: 0;
   padding: 0;
   font-family: Arial, Helvetica, sans-serif;
-  background: #f5f7fb;
-  color: #142033;
+  background:
+    radial-gradient(circle at top right, rgba(255, 201, 117, 0.16), transparent 24%),
+    radial-gradient(circle at top left, rgba(255, 173, 92, 0.1), transparent 22%),
+    linear-gradient(180deg, var(--bg-2) 0%, var(--bg-1) 34%, var(--bg-0) 100%);
+  color: var(--text);
+}
+
+body {
+  min-height: 100vh;
 }
 
 a {
@@ -19,9 +44,14 @@ button, input, select {
   font: inherit;
 }
 
+main {
+  position: relative;
+  z-index: 1;
+}
+
 .home-shell,
 .page-shell {
-  max-width: 1100px;
+  max-width: 1120px;
   margin: 0 auto;
   padding: 24px;
 }
@@ -31,14 +61,17 @@ button, input, select {
 .notice,
 .card-link,
 .service-card {
-  background: #fff;
-  border: 1px solid #dbe3ef;
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(20, 32, 51, 0.04);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  box-shadow: var(--shadow);
 }
 
 .hero {
   padding: 28px;
+  background:
+    linear-gradient(140deg, rgba(255, 247, 229, 0.98), rgba(255, 239, 210, 0.92)),
+    radial-gradient(circle at 85% 20%, rgba(255, 194, 80, 0.18), transparent 24%);
 }
 
 .eyebrow {
@@ -46,27 +79,30 @@ button, input, select {
   text-transform: uppercase;
   letter-spacing: 0.08em;
   font-size: 12px;
-  color: #4a6283;
+  color: var(--accent-deep);
+  font-weight: 700;
 }
 
-h1, h2, p {
+h1, h2, h3, p {
   margin-top: 0;
 }
 
 h1 {
   margin-bottom: 8px;
   font-size: 32px;
+  color: #fff7eb;
+  text-shadow: 0 2px 12px rgba(0, 0, 0, 0.2);
 }
 
 .hero-copy,
 .subtle {
-  color: #5c6f89;
+  color: rgba(255, 244, 228, 0.9);
   margin-bottom: 0;
 }
 
 .card-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 18px;
 }
@@ -74,6 +110,13 @@ h1 {
 .card-link {
   display: block;
   padding: 24px;
+  background:
+    linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(255, 241, 216, 0.96));
+  border-left: 6px solid var(--accent);
+}
+
+.card-link h2 {
+  color: var(--text);
 }
 
 .topbar {
@@ -82,6 +125,12 @@ h1 {
   gap: 20px;
   align-items: flex-start;
   margin-bottom: 18px;
+  color: var(--white);
+}
+
+.topbar h1 {
+  color: var(--white);
+  text-shadow: 0 2px 14px rgba(0, 0, 0, 0.24);
 }
 
 .topnav {
@@ -92,14 +141,17 @@ h1 {
 
 .topnav a {
   padding: 8px 12px;
-  border: 1px solid #dbe3ef;
+  border: 1px solid rgba(255, 235, 197, 0.34);
   border-radius: 999px;
-  background: #fff;
+  background: rgba(255, 246, 228, 0.14);
+  color: var(--white);
+  backdrop-filter: blur(6px);
 }
 
 .panel, .notice {
   padding: 20px;
   margin-bottom: 16px;
+  color: var(--text);
 }
 
 .summary-panel {
@@ -110,6 +162,12 @@ h1 {
   display: grid;
   gap: 6px;
   margin-bottom: 14px;
+}
+
+.panel h2,
+.card-link h2,
+.service-card h2 {
+  color: var(--text);
 }
 
 .form-grid {
@@ -126,8 +184,10 @@ h1 {
 .field span,
 .summary-grid span,
 .service-grid span,
-.hint {
-  color: #5c6f89;
+.hint,
+.metric-note,
+.subtle-dark {
+  color: var(--muted);
   font-size: 13px;
 }
 
@@ -138,23 +198,37 @@ h1 {
 input, select {
   width: 100%;
   padding: 12px 14px;
-  border: 1px solid #c8d3e3;
-  border-radius: 10px;
-  background: #fff;
+  border: 1px solid rgba(140, 97, 49, 0.22);
+  border-radius: 12px;
+  background: rgba(255, 253, 248, 0.98);
+  color: var(--text);
+}
+
+input:focus,
+select:focus {
+  outline: 2px solid rgba(216, 154, 47, 0.24);
+  border-color: rgba(216, 154, 47, 0.55);
 }
 
 .actions {
   display: flex;
   align-items: end;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 button {
   border: 0;
-  border-radius: 10px;
-  background: #15304d;
-  color: #fff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #e7ad35, #c97915);
+  color: #fff9ee;
   padding: 12px 16px;
   cursor: pointer;
+  box-shadow: 0 10px 18px rgba(185, 111, 17, 0.18);
+}
+
+button:hover {
+  filter: brightness(1.02);
 }
 
 button:disabled {
@@ -163,8 +237,10 @@ button:disabled {
 }
 
 .notice {
-  color: #15304d;
+  color: var(--text);
   font-weight: 600;
+  border-left: 5px solid var(--accent);
+  background: linear-gradient(180deg, rgba(255, 246, 227, 0.98), rgba(255, 239, 213, 0.94));
 }
 
 .stack {
@@ -185,9 +261,9 @@ button:disabled {
 
 .summary-grid > div,
 .service-grid > div {
-  background: #f8fafc;
-  border: 1px solid #dbe3ef;
-  border-radius: 10px;
+  background: rgba(255, 250, 240, 0.96);
+  border: 1px solid rgba(190, 136, 67, 0.22);
+  border-radius: 12px;
   padding: 12px;
 }
 
@@ -199,6 +275,7 @@ button:disabled {
 
 .service-card {
   padding: 18px;
+  background: linear-gradient(180deg, rgba(255, 249, 236, 0.98), rgba(255, 240, 214, 0.95));
 }
 
 .table-wrap {
@@ -214,18 +291,19 @@ button:disabled {
 .summary-table td {
   text-align: left;
   padding: 10px 12px;
-  border-bottom: 1px solid #e2e8f0;
+  border-bottom: 1px solid rgba(190, 136, 67, 0.2);
   white-space: nowrap;
 }
 
 .summary-table th {
-  color: #4a6283;
+  color: var(--accent-deep);
   font-size: 13px;
   font-weight: 700;
 }
 
 .lookup-greeting h2 {
   margin-bottom: 0;
+  color: var(--text);
 }
 
 .home-button {
@@ -233,14 +311,19 @@ button:disabled {
   align-items: center;
   justify-content: center;
   padding: 12px 16px;
-  border-radius: 10px;
-  background: #15304d;
-  color: #fff;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #d55d3a, #ab2f25);
+  color: #fffaf0;
+  box-shadow: 0 10px 18px rgba(171, 47, 37, 0.18);
+}
+
+.home-button:hover {
+  filter: brightness(1.03);
 }
 
 .empty-state {
   text-align: center;
-  color: #5c6f89;
+  color: var(--muted);
   padding: 24px 8px;
 }
 
@@ -272,7 +355,7 @@ button:disabled {
   .notice,
   .card-link,
   .service-card {
-    border-radius: 10px;
+    border-radius: 12px;
     padding: 16px;
   }
 
