@@ -74,7 +74,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const tshirtEligible = tshirtServiceNames.has(String(actualOrChosenService || "").trim());
   const tshirtAlreadyMarked = String(searchResult.volunteer?.tshirt || "").trim().toLowerCase() === "yes";
   const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
-  const showLookupServiceChooser = mode === "lookup" && (lookupStage === "needsService" || lookupStage === "registered");
+  const showLookupServiceChooser = mode === "lookup" && (
+    lookupStage === "needsService" ||
+    lookupStage === "registered" ||
+    lookupStage === "serviceMismatch"
+  );
   const showLookupTshirtCard = mode === "lookup" && searchResult.found && searchResult.allocated && tshirtEligible && !tshirtAlreadyMarked && !serviceMismatch;
   const showLookupDetails = mode === "lookup" && (
     searchResult.found &&
@@ -275,16 +279,26 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not verify service");
       const latest = payload.data || emptySearchResult;
       const actualService = String(latest.volunteer?.allocatedService || "").trim();
-      if (!latest.found || !latest.allocated || actualService !== selected) {
+      if (!latest.found) {
         setSearchResult(latest);
         setServiceMismatch(true);
         setTshirtChecked(false);
+        setLookupStage("serviceMismatch");
+        setMessage("This is not your assigned service, select your assigned service.");
+        return;
+      }
+      if (!latest.allocated || actualService !== selected) {
+        setSearchResult(latest);
+        setServiceMismatch(true);
+        setTshirtChecked(false);
+        setLookupStage(latest.allocated ? "serviceMismatch" : "needsService");
         setMessage("This is not your assigned service, select your assigned service.");
         return;
       }
       setSearchResult(latest);
       setServiceMismatch(false);
       setTshirtChecked(String(latest.volunteer?.tshirt || "").trim().toLowerCase() === "yes");
+      setLookupStage("serviceSelected");
       setMessage("");
     } catch (error) {
       setMessage(error.message || "Could not verify service");
