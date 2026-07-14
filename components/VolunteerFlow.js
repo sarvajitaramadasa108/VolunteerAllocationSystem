@@ -147,7 +147,6 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (payload.data?.found) {
         setLookupStage(payload.data.allocated ? "allocated" : "needsService");
         setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
-        setLookupServiceConfirmed(payload.data.allocated ? payload.data?.volunteer?.allocatedService || "" : "");
         setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet. Please report at Service allocation desk.");
       } else {
         setLookupStage("needsRegistration");
