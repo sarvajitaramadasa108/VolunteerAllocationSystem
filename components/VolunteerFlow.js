@@ -403,6 +403,34 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <h2>Hare Krishna {searchResult.volunteer?.name || ""}</h2>
                 </div>
 
+                {showLookupServiceChooser ? (
+                  <div className="service-card tshirt-card">
+                    <h2>After Allocation, Select Your Service</h2>
+                    <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
+                    <label className="field wide">
+                      <span>Assigned Service</span>
+                      <select
+                        value={lookupServiceSelection}
+                        onChange={(event) => {
+                          setLookupServiceSelection(event.target.value);
+                          setServiceMismatch(false);
+                          setTshirtChecked(false);
+                        }}
+                      >
+                        <option value="">Select service</option>
+                        {services.map((service) => (
+                          <option key={service.serviceName} value={service.serviceName}>
+                            {service.serviceName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <button type="button" onClick={confirmServiceSelection}>
+                      Continue
+                    </button>
+                  </div>
+                ) : null}
+
                 {showLookupTshirtCard ? (
                   <div className="service-card tshirt-card">
                     <h2>T Shirt Collection</h2>
@@ -450,36 +478,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 ) : null}
 
                 {!searchResult.allocated ? (
-                  <div className="stack">
-                    <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
-                    {showLookupServiceChooser ? (
-                      <div className="service-card tshirt-card">
-                        <h2>After Allocation, Select Your Service</h2>
-                        <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
-                        <label className="field wide">
-                          <span>Assigned Service</span>
-                          <select
-                            value={lookupServiceSelection}
-                            onChange={(event) => {
-                              setLookupServiceSelection(event.target.value);
-                              setServiceMismatch(false);
-                              setTshirtChecked(false);
-                            }}
-                          >
-                            <option value="">Select service</option>
-                            {services.map((service) => (
-                              <option key={service.serviceName} value={service.serviceName}>
-                                {service.serviceName}
-                              </option>
-                            ))}
-                          </select>
-                        </label>
-                        <button type="button" onClick={confirmServiceSelection}>
-                          Continue
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
+                  <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
                 ) : null}
               </>
             ) : showLookupRegistrationForm ? (
@@ -514,33 +513,6 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                     <button type="submit" disabled={saving}>{saving ? "Saving..." : "Register Volunteer"}</button>
                   </div>
                 </form>
-                {showLookupServiceChooser ? (
-                  <div className="service-card tshirt-card">
-                    <h2>After Allocation, Select Your Service</h2>
-                        <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
-                    <label className="field wide">
-                      <span>Assigned Service</span>
-                          <select
-                            value={lookupServiceSelection}
-                            onChange={(event) => {
-                              setLookupServiceSelection(event.target.value);
-                              setServiceMismatch(false);
-                              setTshirtChecked(false);
-                            }}
-                          >
-                        <option value="">Select service</option>
-                        {services.map((service) => (
-                          <option key={service.serviceName} value={service.serviceName}>
-                            {service.serviceName}
-                          </option>
-                        ))}
-                      </select>
-                    </label>
-                    <button type="button" onClick={confirmServiceSelection}>
-                      Continue
-                    </button>
-                  </div>
-                ) : null}
               </div>
             ) : (
               <div className="empty-state">
