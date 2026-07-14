@@ -49,7 +49,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const [lookupSearched, setLookupSearched] = useState(false);
   const [lookupStage, setLookupStage] = useState("idle");
   const [lookupServiceSelection, setLookupServiceSelection] = useState("");
-  const [lookupServiceConfirmed, setLookupServiceConfirmed] = useState("");
+  const [serviceMismatch, setServiceMismatch] = useState(false);
   const [tshirtChecked, setTshirtChecked] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -66,9 +66,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     () => services.find((item) => item.serviceName === form.service) || null,
     [services, form.service]
   );
-  const actualOrChosenService = searchResult.allocated
-    ? searchResult.volunteer?.allocatedService || ""
-    : lookupServiceConfirmed || "";
+  const actualOrChosenService = searchResult.volunteer?.allocatedService || "";
   const actualOrChosenServiceDetails = useMemo(
     () => services.find((service) => service.serviceName === actualOrChosenService) || null,
     [services, actualOrChosenService]
@@ -77,12 +75,12 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const tshirtAlreadyMarked = String(searchResult.volunteer?.tshirt || "").trim().toLowerCase() === "yes";
   const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
   const showLookupServiceChooser = mode === "lookup" && (lookupStage === "needsService" || lookupStage === "registered");
-  const showLookupTshirtCard = mode === "lookup" && tshirtEligible && !tshirtAlreadyMarked && (
-    searchResult.allocated || lookupStage === "serviceChosen" || lookupStage === "allocated"
-  );
+  const showLookupTshirtCard = mode === "lookup" && searchResult.found && searchResult.allocated && tshirtEligible && !tshirtAlreadyMarked && !serviceMismatch;
   const showLookupDetails = mode === "lookup" && (
-    (searchResult.allocated && (!tshirtEligible || tshirtAlreadyMarked)) ||
-    (lookupStage === "serviceChosen" && (!tshirtEligible || tshirtChecked))
+    searchResult.found &&
+    searchResult.allocated &&
+    !serviceMismatch &&
+    (!tshirtEligible || tshirtAlreadyMarked)
   );
 
   useEffect(() => {
@@ -112,7 +110,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     setLookupSearched(false);
     setLookupStage("idle");
     setLookupServiceSelection("");
-    setLookupServiceConfirmed("");
+    setServiceMismatch(false);
     setTshirtChecked(false);
     setSearchResult(emptySearchResult);
   }
@@ -154,7 +152,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       } else {
         setLookupStage("needsRegistration");
         setLookupServiceSelection("");
-        setLookupServiceConfirmed("");
+        setServiceMismatch(false);
         setTshirtChecked(false);
         setForm({
           name: "",
@@ -234,7 +232,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           serviceDetails: null
         });
         setLookupServiceSelection("");
-        setLookupServiceConfirmed("");
+        setServiceMismatch(false);
         setTshirtChecked(false);
       } else {
         resetLookupState("");
@@ -261,10 +259,39 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       setMessage("Please select your assigned service");
       return;
     }
-    setLookupServiceConfirmed(selected);
-    setLookupStage("serviceChosen");
-    setTshirtChecked(false);
+    const normalized = normalizeMobile(mobile);
+    if (!normalized) {
+      setMessage("Enter a mobile number");
+      return;
+    }
+    setSearching(true);
     setMessage("");
+    try {
+      const response = await fetch("/api/bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "volunteers.search", mobile: normalized, markAttendance: false })
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not verify service");
+      const latest = payload.data || emptySearchResult;
+      const actualService = String(latest.volunteer?.allocatedService || "").trim();
+      if (!latest.found || !latest.allocated || actualService !== selected) {
+        setSearchResult(latest);
+        setServiceMismatch(true);
+        setTshirtChecked(false);
+        setMessage("This is not your assigned service, select your assigned service.");
+        return;
+      }
+      setSearchResult(latest);
+      setServiceMismatch(false);
+      setTshirtChecked(String(latest.volunteer?.tshirt || "").trim().toLowerCase() === "yes");
+      setMessage("");
+    } catch (error) {
+      setMessage(error.message || "Could not verify service");
+    } finally {
+      setSearching(false);
+    }
   }
 
   async function confirmTshirtCollection() {
@@ -297,6 +324,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         volunteer: current.volunteer ? { ...current.volunteer, tshirt: "Yes" } : current.volunteer
       }));
       setTshirtChecked(true);
+      setServiceMismatch(false);
       setMessage("T Shirt marked as collected.");
     } catch (error) {
       setMessage(error.message || "Could not update T Shirt status");
@@ -334,7 +362,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 setMessage("");
                 setSearchResult(emptySearchResult);
                 setLookupServiceSelection("");
-                setLookupServiceConfirmed("");
+                setServiceMismatch(false);
                 setTshirtChecked(false);
                 if (mode === "lookup") {
                   setLookupSearched(false);
@@ -421,7 +449,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                             value={lookupServiceSelection}
                             onChange={(event) => {
                               setLookupServiceSelection(event.target.value);
-                              setLookupServiceConfirmed("");
+                              setServiceMismatch(false);
                               setTshirtChecked(false);
                             }}
                           >
@@ -476,17 +504,17 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 {showLookupServiceChooser ? (
                   <div className="service-card tshirt-card">
                     <h2>After Allocation, Select Your Service</h2>
-                    <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
+                        <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
                     <label className="field wide">
                       <span>Assigned Service</span>
-                      <select
-                        value={lookupServiceSelection}
-                        onChange={(event) => {
-                          setLookupServiceSelection(event.target.value);
-                          setLookupServiceConfirmed("");
-                          setTshirtChecked(false);
-                        }}
-                      >
+                          <select
+                            value={lookupServiceSelection}
+                            onChange={(event) => {
+                              setLookupServiceSelection(event.target.value);
+                              setServiceMismatch(false);
+                              setTshirtChecked(false);
+                            }}
+                          >
                         <option value="">Select service</option>
                         {services.map((service) => (
                           <option key={service.serviceName} value={service.serviceName}>
