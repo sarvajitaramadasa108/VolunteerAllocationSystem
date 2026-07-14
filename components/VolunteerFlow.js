@@ -49,6 +49,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const [lookupSearched, setLookupSearched] = useState(false);
   const [lookupStage, setLookupStage] = useState("idle");
   const [lookupServiceSelection, setLookupServiceSelection] = useState("");
+  const [lookupServiceConfirmed, setLookupServiceConfirmed] = useState("");
   const [tshirtChecked, setTshirtChecked] = useState(false);
   const [form, setForm] = useState({
     name: "",
@@ -60,18 +61,29 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   });
 
   const canAllocate = mode === "allocate";
+  const showAllocationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
   const selectedService = useMemo(
     () => services.find((item) => item.serviceName === form.service) || null,
     [services, form.service]
   );
-  const selectedLookupService = searchResult.allocated
+  const actualOrChosenService = searchResult.allocated
     ? searchResult.volunteer?.allocatedService || ""
-    : lookupServiceSelection;
-  const tshirtEligible = tshirtServiceNames.has(String(selectedLookupService || "").trim());
-  const showAllocationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
+    : lookupServiceConfirmed || "";
+  const actualOrChosenServiceDetails = useMemo(
+    () => services.find((service) => service.serviceName === actualOrChosenService) || null,
+    [services, actualOrChosenService]
+  );
+  const tshirtEligible = tshirtServiceNames.has(String(actualOrChosenService || "").trim());
+  const tshirtAlreadyMarked = String(searchResult.volunteer?.tshirt || "").trim().toLowerCase() === "yes";
   const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
   const showLookupServiceChooser = mode === "lookup" && (lookupStage === "needsService" || lookupStage === "registered");
-  const showTshirtCard = mode === "lookup" && tshirtEligible && (searchResult.allocated || showLookupServiceChooser);
+  const showLookupTshirtCard = mode === "lookup" && tshirtEligible && !tshirtAlreadyMarked && (
+    searchResult.allocated || lookupStage === "serviceChosen" || lookupStage === "allocated"
+  );
+  const showLookupDetails = mode === "lookup" && (
+    (searchResult.allocated && (!tshirtEligible || tshirtAlreadyMarked)) ||
+    (lookupStage === "serviceChosen" && (!tshirtEligible || tshirtChecked))
+  );
 
   useEffect(() => {
     void loadServices();
@@ -100,6 +112,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     setLookupSearched(false);
     setLookupStage("idle");
     setLookupServiceSelection("");
+    setLookupServiceConfirmed("");
     setTshirtChecked(false);
     setSearchResult(emptySearchResult);
   }
@@ -136,10 +149,12 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (payload.data?.found) {
         setLookupStage(payload.data.allocated ? "allocated" : "needsService");
         setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
+        setLookupServiceConfirmed(payload.data.allocated ? payload.data?.volunteer?.allocatedService || "" : "");
         setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet. Please report at Service allocation desk.");
       } else {
         setLookupStage("needsRegistration");
         setLookupServiceSelection("");
+        setLookupServiceConfirmed("");
         setTshirtChecked(false);
         setForm({
           name: "",
@@ -219,6 +234,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           serviceDetails: null
         });
         setLookupServiceSelection("");
+        setLookupServiceConfirmed("");
         setTshirtChecked(false);
       } else {
         resetLookupState("");
@@ -237,6 +253,18 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     } finally {
       setSaving(false);
     }
+  }
+
+  async function confirmServiceSelection() {
+    const selected = String(lookupServiceSelection || "").trim();
+    if (!selected) {
+      setMessage("Please select your assigned service");
+      return;
+    }
+    setLookupServiceConfirmed(selected);
+    setLookupStage("serviceChosen");
+    setTshirtChecked(false);
+    setMessage("");
   }
 
   async function confirmTshirtCollection() {
@@ -268,6 +296,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         ...current,
         volunteer: current.volunteer ? { ...current.volunteer, tshirt: "Yes" } : current.volunteer
       }));
+      setTshirtChecked(true);
       setMessage("T Shirt marked as collected.");
     } catch (error) {
       setMessage(error.message || "Could not update T Shirt status");
@@ -305,6 +334,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 setMessage("");
                 setSearchResult(emptySearchResult);
                 setLookupServiceSelection("");
+                setLookupServiceConfirmed("");
                 setTshirtChecked(false);
                 if (mode === "lookup") {
                   setLookupSearched(false);
@@ -331,35 +361,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 <div className="lookup-greeting">
                   <h2>Hare Krishna {searchResult.volunteer?.name || ""}</h2>
                 </div>
-                {searchResult.allocated ? (
-                  <div className="service-card">
-                    <h2>Your Allocated Service</h2>
-                    <div className="service-grid service-grid-single lookup-service-grid">
-                      <div><span>Your Allocated Service</span><strong>{searchResult.volunteer?.allocatedService || "-"}</strong></div>
-                      <div className="coordinator-card">
-                        <span>Your Service Coordinator Name</span>
-                        <div className="coordinator-profile">
-                          <div className="coordinator-photo-wrap">
-                            {searchResult.serviceDetails?.photoUrl ? (
-                              <img
-                                className="coordinator-photo"
-                                src={buildDriveImageUrl(searchResult.serviceDetails.photoUrl)}
-                                alt={searchResult.serviceDetails?.coordinatorName || "Coordinator photo"}
-                              />
-                            ) : (
-                              <div className="coordinator-photo coordinator-photo-placeholder">No Photo</div>
-                            )}
-                          </div>
-                          <strong>{searchResult.serviceDetails?.coordinatorName || "-"}</strong>
-                        </div>
-                      </div>
-                      <div><span>Your Service Coordinator Contact Number</span><strong>{searchResult.serviceDetails?.contactNumber || "-"}</strong></div>
-                      <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>
-                    </div>
-                  </div>
-                ) : null}
 
-                {showTshirtCard ? (
+                {showLookupTshirtCard ? (
                   <div className="service-card tshirt-card">
                     <h2>T Shirt Collection</h2>
                     <p className="subtle-dark">Please collect the T Shirt from the Volunteer Reception Desk and tick the box after collection.</p>
@@ -377,19 +380,48 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   </div>
                 ) : null}
 
+                {showLookupDetails ? (
+                  <div className="service-card">
+                    <h2>Your Allocated Service</h2>
+                    <div className="service-grid service-grid-single lookup-service-grid">
+                      <div><span>Your Allocated Service</span><strong>{actualOrChosenService || "-"}</strong></div>
+                      <div className="coordinator-card">
+                        <span>Your Service Coordinator Name</span>
+                        <div className="coordinator-profile">
+                          <div className="coordinator-photo-wrap">
+                            {actualOrChosenServiceDetails?.photoUrl ? (
+                              <img
+                                className="coordinator-photo"
+                                src={buildDriveImageUrl(actualOrChosenServiceDetails.photoUrl)}
+                                alt={actualOrChosenServiceDetails?.coordinatorName || "Coordinator photo"}
+                              />
+                            ) : (
+                              <div className="coordinator-photo coordinator-photo-placeholder">No Photo</div>
+                            )}
+                          </div>
+                          <strong>{actualOrChosenServiceDetails?.coordinatorName || "-"}</strong>
+                        </div>
+                      </div>
+                      <div><span>Your Service Coordinator Contact Number</span><strong>{actualOrChosenServiceDetails?.contactNumber || "-"}</strong></div>
+                      <div><span>Your Service Reporting Time</span><strong>{actualOrChosenServiceDetails?.reportingTime || "-"}</strong></div>
+                    </div>
+                  </div>
+                ) : null}
+
                 {!searchResult.allocated ? (
                   <div className="stack">
                     <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
                     {showLookupServiceChooser ? (
                       <div className="service-card tshirt-card">
                         <h2>After Allocation, Select Your Service</h2>
-                        <p className="subtle-dark">Choose the service you will receive after reporting at the allocation desk.</p>
+                        <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
                         <label className="field wide">
                           <span>Assigned Service</span>
                           <select
                             value={lookupServiceSelection}
                             onChange={(event) => {
                               setLookupServiceSelection(event.target.value);
+                              setLookupServiceConfirmed("");
                               setTshirtChecked(false);
                             }}
                           >
@@ -401,23 +433,9 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                             ))}
                           </select>
                         </label>
-                        {tshirtEligible ? (
-                          <>
-                            <label className="tshirt-check">
-                              <input
-                                type="checkbox"
-                                checked={tshirtChecked}
-                                onChange={(event) => setTshirtChecked(event.target.checked)}
-                              />
-                              <span>I have collected my T Shirt</span>
-                            </label>
-                            <button type="button" onClick={confirmTshirtCollection} disabled={tshirtSaving || !tshirtChecked}>
-                              {tshirtSaving ? "Updating..." : "Confirm T Shirt Collection"}
-                            </button>
-                          </>
-                        ) : lookupServiceSelection ? (
-                          <div className="notice inline-notice">This service does not require a T Shirt collection.</div>
-                        ) : null}
+                        <button type="button" onClick={confirmServiceSelection}>
+                          Continue
+                        </button>
                       </div>
                     ) : null}
                   </div>
@@ -458,13 +476,14 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 {showLookupServiceChooser ? (
                   <div className="service-card tshirt-card">
                     <h2>After Allocation, Select Your Service</h2>
-                    <p className="subtle-dark">Choose the service you will receive after reporting at the allocation desk.</p>
+                    <p className="subtle-dark">Choose the service you receive at the allocation desk, then continue.</p>
                     <label className="field wide">
                       <span>Assigned Service</span>
                       <select
                         value={lookupServiceSelection}
                         onChange={(event) => {
                           setLookupServiceSelection(event.target.value);
+                          setLookupServiceConfirmed("");
                           setTshirtChecked(false);
                         }}
                       >
@@ -476,23 +495,9 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                         ))}
                       </select>
                     </label>
-                    {tshirtEligible ? (
-                      <>
-                        <label className="tshirt-check">
-                          <input
-                            type="checkbox"
-                            checked={tshirtChecked}
-                            onChange={(event) => setTshirtChecked(event.target.checked)}
-                          />
-                          <span>I have collected my T Shirt</span>
-                        </label>
-                        <button type="button" onClick={confirmTshirtCollection} disabled={tshirtSaving || !tshirtChecked}>
-                          {tshirtSaving ? "Updating..." : "Confirm T Shirt Collection"}
-                        </button>
-                      </>
-                    ) : lookupServiceSelection ? (
-                      <div className="notice inline-notice">This service does not require a T Shirt collection.</div>
-                    ) : null}
+                    <button type="button" onClick={confirmServiceSelection}>
+                      Continue
+                    </button>
                   </div>
                 ) : null}
               </div>
