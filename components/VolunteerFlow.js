@@ -10,6 +10,13 @@ const emptySearchResult = {
   serviceDetails: null
 };
 
+const tshirtServiceNames = new Set([
+  "VIP Hospitality",
+  "Ratha entourage",
+  "Prasadam Distribution along the way",
+  "Ratha coordinating"
+]);
+
 function buildDriveImageUrl(link) {
   const value = String(link || "").trim();
   if (!value) return "";
@@ -36,9 +43,13 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const [mobile, setMobile] = useState("");
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [tshirtSaving, setTshirtSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [searchResult, setSearchResult] = useState(emptySearchResult);
   const [lookupSearched, setLookupSearched] = useState(false);
+  const [lookupStage, setLookupStage] = useState("idle");
+  const [lookupServiceSelection, setLookupServiceSelection] = useState("");
+  const [tshirtChecked, setTshirtChecked] = useState(false);
   const [form, setForm] = useState({
     name: "",
     age: "",
@@ -47,9 +58,20 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     areaOfStay: "",
     service: ""
   });
+
   const canAllocate = mode === "allocate";
+  const selectedService = useMemo(
+    () => services.find((item) => item.serviceName === form.service) || null,
+    [services, form.service]
+  );
+  const selectedLookupService = searchResult.allocated
+    ? searchResult.volunteer?.allocatedService || ""
+    : lookupServiceSelection;
+  const tshirtEligible = tshirtServiceNames.has(String(selectedLookupService || "").trim());
   const showAllocationForm = canAllocate && (searchResult.found || (!searchResult.found && mobile));
-  const showLookupRegistrationForm = mode === "lookup" && lookupSearched && !searching && !searchResult.found;
+  const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
+  const showLookupServiceChooser = mode === "lookup" && (lookupStage === "needsService" || lookupStage === "registered");
+  const showTshirtCard = mode === "lookup" && tshirtEligible && (searchResult.allocated || showLookupServiceChooser);
 
   useEffect(() => {
     void loadServices();
@@ -71,6 +93,15 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     if (digits.length === 12 && digits.startsWith("91")) return digits.slice(-10);
     if (digits.length > 10) return digits.slice(-10);
     return digits;
+  }
+
+  function resetLookupState(nextMobile = "") {
+    setMobile(nextMobile);
+    setLookupSearched(false);
+    setLookupStage("idle");
+    setLookupServiceSelection("");
+    setTshirtChecked(false);
+    setSearchResult(emptySearchResult);
   }
 
   async function searchVolunteer(event) {
@@ -101,9 +132,15 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         areaOfStay: payload.data?.volunteer?.areaOfStay || "",
         service: payload.data?.volunteer?.allocatedService || ""
       }));
+      setTshirtChecked(String(payload.data?.volunteer?.tshirt || "").trim().toLowerCase() === "yes");
       if (payload.data?.found) {
-        setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet.");
+        setLookupStage(payload.data.allocated ? "allocated" : "needsService");
+        setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
+        setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet. Please report at Service allocation desk.");
       } else {
+        setLookupStage("needsRegistration");
+        setLookupServiceSelection("");
+        setTshirtChecked(false);
         setForm({
           name: "",
           age: "",
@@ -112,11 +149,12 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           areaOfStay: "",
           service: ""
         });
-        setMessage("Mobile number not found. Please register the volunteer.");
+        setMessage("Mobile number not found. Please register the volunteer using the form below.");
       }
     } catch (error) {
       setMessage(error.message || "Could not search this mobile number");
       setSearchResult(emptySearchResult);
+      setLookupStage("idle");
     } finally {
       setSearching(false);
     }
@@ -162,9 +200,30 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           ? "Registration successful. Please report at the desk for service allocation."
           : `${successLabel} for ${normalized}`
       );
-      setMobile("");
-      setLookupSearched(false);
-      setSearchResult(emptySearchResult);
+
+      if (mode === "lookup" && !searchResult.found) {
+        setLookupStage("registered");
+        setSearchResult({
+          found: true,
+          allocated: false,
+          volunteer: {
+            name: form.name,
+            age: form.age,
+            gender: form.gender,
+            occupation: form.occupation,
+            areaOfStay: form.areaOfStay,
+            mobile: normalized,
+            allocatedService: "",
+            tshirt: ""
+          },
+          serviceDetails: null
+        });
+        setLookupServiceSelection("");
+        setTshirtChecked(false);
+      } else {
+        resetLookupState("");
+      }
+
       setForm({
         name: "",
         age: "",
@@ -180,10 +239,42 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     }
   }
 
-  const selectedService = useMemo(
-    () => services.find((item) => item.serviceName === form.service) || null,
-    [services, form.service]
-  );
+  async function confirmTshirtCollection() {
+    const tshirtMobile = normalizeMobile(mobile);
+    if (!tshirtMobile) {
+      setMessage("Enter a mobile number");
+      return;
+    }
+    if (!tshirtEligible) {
+      setMessage("Select an eligible service first");
+      return;
+    }
+    if (!tshirtChecked) {
+      setMessage("Please tick the box after collection");
+      return;
+    }
+
+    setTshirtSaving(true);
+    setMessage("");
+    try {
+      const response = await fetch("/api/bridge", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "volunteers.tshirt", mobile: tshirtMobile, tShirt: "Yes" })
+      });
+      const payload = await readJsonResponse(response);
+      if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not update T Shirt status");
+      setSearchResult((current) => ({
+        ...current,
+        volunteer: current.volunteer ? { ...current.volunteer, tshirt: "Yes" } : current.volunteer
+      }));
+      setMessage("T Shirt marked as collected.");
+    } catch (error) {
+      setMessage(error.message || "Could not update T Shirt status");
+    } finally {
+      setTshirtSaving(false);
+    }
+  }
 
   return (
     <main className="page-shell">
@@ -213,8 +304,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 setMobile(event.target.value);
                 setMessage("");
                 setSearchResult(emptySearchResult);
+                setLookupServiceSelection("");
+                setTshirtChecked(false);
                 if (mode === "lookup") {
                   setLookupSearched(false);
+                  setLookupStage("idle");
                 }
               }}
             />
@@ -263,9 +357,71 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                       <div><span>Your Service Reporting Time</span><strong>{searchResult.serviceDetails?.reportingTime || "-"}</strong></div>
                     </div>
                   </div>
-                ) : (
-                  <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
-                )}
+                ) : null}
+
+                {showTshirtCard ? (
+                  <div className="service-card tshirt-card">
+                    <h2>T Shirt Collection</h2>
+                    <p className="subtle-dark">Please collect the T Shirt from the Volunteer Reception Desk and tick the box after collection.</p>
+                    <label className="tshirt-check">
+                      <input
+                        type="checkbox"
+                        checked={tshirtChecked}
+                        onChange={(event) => setTshirtChecked(event.target.checked)}
+                      />
+                      <span>I have collected my T Shirt</span>
+                    </label>
+                    <button type="button" onClick={confirmTshirtCollection} disabled={tshirtSaving || !tshirtChecked}>
+                      {tshirtSaving ? "Updating..." : "Confirm T Shirt Collection"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {!searchResult.allocated ? (
+                  <div className="stack">
+                    <div className="notice">You have not been allocated any service yet. Please report at Service allocation desk.</div>
+                    {showLookupServiceChooser ? (
+                      <div className="service-card tshirt-card">
+                        <h2>After Allocation, Select Your Service</h2>
+                        <p className="subtle-dark">Choose the service you will receive after reporting at the allocation desk.</p>
+                        <label className="field wide">
+                          <span>Assigned Service</span>
+                          <select
+                            value={lookupServiceSelection}
+                            onChange={(event) => {
+                              setLookupServiceSelection(event.target.value);
+                              setTshirtChecked(false);
+                            }}
+                          >
+                            <option value="">Select service</option>
+                            {services.map((service) => (
+                              <option key={service.serviceName} value={service.serviceName}>
+                                {service.serviceName}
+                              </option>
+                            ))}
+                          </select>
+                        </label>
+                        {tshirtEligible ? (
+                          <>
+                            <label className="tshirt-check">
+                              <input
+                                type="checkbox"
+                                checked={tshirtChecked}
+                                onChange={(event) => setTshirtChecked(event.target.checked)}
+                              />
+                              <span>I have collected my T Shirt</span>
+                            </label>
+                            <button type="button" onClick={confirmTshirtCollection} disabled={tshirtSaving || !tshirtChecked}>
+                              {tshirtSaving ? "Updating..." : "Confirm T Shirt Collection"}
+                            </button>
+                          </>
+                        ) : lookupServiceSelection ? (
+                          <div className="notice inline-notice">This service does not require a T Shirt collection.</div>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
               </>
             ) : showLookupRegistrationForm ? (
               <div className="stack">
@@ -299,6 +455,46 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                     <button type="submit" disabled={saving}>{saving ? "Saving..." : "Register Volunteer"}</button>
                   </div>
                 </form>
+                {showLookupServiceChooser ? (
+                  <div className="service-card tshirt-card">
+                    <h2>After Allocation, Select Your Service</h2>
+                    <p className="subtle-dark">Choose the service you will receive after reporting at the allocation desk.</p>
+                    <label className="field wide">
+                      <span>Assigned Service</span>
+                      <select
+                        value={lookupServiceSelection}
+                        onChange={(event) => {
+                          setLookupServiceSelection(event.target.value);
+                          setTshirtChecked(false);
+                        }}
+                      >
+                        <option value="">Select service</option>
+                        {services.map((service) => (
+                          <option key={service.serviceName} value={service.serviceName}>
+                            {service.serviceName}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    {tshirtEligible ? (
+                      <>
+                        <label className="tshirt-check">
+                          <input
+                            type="checkbox"
+                            checked={tshirtChecked}
+                            onChange={(event) => setTshirtChecked(event.target.checked)}
+                          />
+                          <span>I have collected my T Shirt</span>
+                        </label>
+                        <button type="button" onClick={confirmTshirtCollection} disabled={tshirtSaving || !tshirtChecked}>
+                          {tshirtSaving ? "Updating..." : "Confirm T Shirt Collection"}
+                        </button>
+                      </>
+                    ) : lookupServiceSelection ? (
+                      <div className="notice inline-notice">This service does not require a T Shirt collection.</div>
+                    ) : null}
+                  </div>
+                ) : null}
               </div>
             ) : (
               <div className="empty-state">

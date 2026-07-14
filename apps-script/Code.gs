@@ -18,6 +18,7 @@ function route(action, payload) {
   if (action === "volunteers.search") return { ok: true, data: searchVolunteer(payload.mobile, payload.markAttendance) };
   if (action === "volunteers.allocate") return { ok: true, data: allocateService(payload) };
   if (action === "volunteers.upsert") return { ok: true, data: upsertVolunteer(payload) };
+  if (action === "volunteers.tshirt") return { ok: true, data: updateTshirtStatus(payload) };
   if (action === "volunteers.byService") return { ok: true, data: volunteersByService(payload.serviceName) };
   if (action === "sync.formResponses") return { ok: true, data: syncFormResponsesToMaster() };
   if (action === "setup") return { ok: true, data: setupSheets() };
@@ -81,11 +82,13 @@ function syncFormResponseRow(row) {
   let rowIndex = -1;
   let allocatedService = "";
   let attendance = "";
+  let tshirt = "";
   for (let i = 1; i < rows.length; i++) {
     if (normalizeMobile(rows[i][2]) === normalized) {
       rowIndex = i + 1;
       allocatedService = String(rows[i][7] || "").trim();
       attendance = String(rows[i][8] || "").trim();
+      tshirt = String(rows[i][9] || "").trim();
       break;
     }
   }
@@ -102,11 +105,12 @@ function syncFormResponseRow(row) {
     occupation,
     areaOfStay,
     allocatedService,
-    attendance
+    attendance,
+    tshirt
   ];
 
   if (rowIndex > 0) {
-    master.getRange(rowIndex, 1, 1, 9).setValues([updatedRow]);
+    master.getRange(rowIndex, 1, 1, 10).setValues([updatedRow]);
   } else {
     master.appendRow(updatedRow);
   }
@@ -203,11 +207,12 @@ function upsertVolunteer(payload) {
     String(payload.occupation || "").trim(),
     String(payload.areaOfStay || "").trim(),
     String(payload.service || "").trim(),
-    markAttendance ? "Yes" : (rowIndex > 0 ? String(rows[rowIndex - 1][8] || "").trim() : "")
+    markAttendance ? "Yes" : (rowIndex > 0 ? String(rows[rowIndex - 1][8] || "").trim() : ""),
+    rowIndex > 0 ? String(rows[rowIndex - 1][9] || "").trim() : ""
   ];
 
   if (rowIndex > 0) {
-    sheet.getRange(rowIndex, 1, 1, 9).setValues([volunteerRow]);
+    sheet.getRange(rowIndex, 1, 1, 10).setValues([volunteerRow]);
   } else {
     sheet.appendRow(volunteerRow);
     rowIndex = sheet.getLastRow();
@@ -220,6 +225,29 @@ function upsertVolunteer(payload) {
     volunteer: mapVolunteerRow(volunteerRow, rowIndex),
     serviceDetails: volunteerRow[7] ? getServiceDetails(volunteerRow[7]) : null
   };
+}
+
+function updateTshirtStatus(payload) {
+  const normalized = normalizeMobile(payload.mobile);
+  if (!normalized) throw new Error("Enter a valid mobile number");
+  const tshirt = String(payload.tShirt || payload.tshirt || "").trim();
+  if (!tshirt) throw new Error("T Shirt status is required");
+  const sheet = masterSheet();
+  const rows = sheet.getDataRange().getValues();
+  for (let i = 1; i < rows.length; i++) {
+    if (normalizeMobile(rows[i][2]) === normalized) {
+      ensureMasterHeader(sheet);
+      const rowToWrite = rows[i].slice(0, 10);
+      while (rowToWrite.length < 10) rowToWrite.push("");
+      rowToWrite[9] = tshirt;
+      sheet.getRange(i + 1, 1, 1, 10).setValues([rowToWrite]);
+      return {
+        found: true,
+        volunteer: mapVolunteerRow(rowToWrite, i + 1)
+      };
+    }
+  }
+  throw new Error("Volunteer not found");
 }
 
 function getServiceDetails(serviceName) {
@@ -243,7 +271,8 @@ function volunteersByService(serviceName) {
       age: String(row[4] || "").trim(),
       occupation: String(row[5] || "").trim(),
       areaOfStay: String(row[6] || "").trim(),
-      allocatedService: String(row[7] || "").trim()
+      allocatedService: String(row[7] || "").trim(),
+      tshirt: String(row[9] || "").trim()
     });
   }
   return result;
@@ -259,7 +288,8 @@ function mapVolunteerRow(row, rowNumber) {
     occupation: String(row[5] || "").trim(),
     areaOfStay: String(row[6] || "").trim(),
     allocatedService: String(row[7] || "").trim(),
-    attendance: String(row[8] || "").trim()
+    attendance: String(row[8] || "").trim(),
+    tshirt: String(row[9] || "").trim()
   };
 }
 
@@ -280,7 +310,7 @@ function serviceSheet() {
 }
 
 function ensureMasterHeader(sheet) {
-  const headers = ["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service", "Attendance"];
+  const headers = ["S No", "Name", "Mobile Number", "Gender", "Age", "College / Working", "Area of Stay", "Allocated Service", "Attendance", "T Shirt"];
   if (sheet.getLastRow() === 0) {
     sheet.appendRow(headers);
     return;
