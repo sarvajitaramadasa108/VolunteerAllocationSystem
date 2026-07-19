@@ -72,7 +72,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     [services, actualOrChosenService]
   );
   const tshirtEligible = tshirtServiceNames.has(String(actualOrChosenService || "").trim());
-  const tshirtAlreadyMarked = String(searchResult.volunteer?.tshirt || "").trim().toLowerCase() === "yes";
+  const tshirtAlreadyMarked = Boolean(searchResult.volunteer?.tshirt);
   const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
   const showLookupServiceChooser = mode === "lookup" && (
     lookupStage === "needsService" ||
@@ -147,7 +147,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         areaOfStay: payload.data?.volunteer?.areaOfStay || "",
         service: payload.data?.volunteer?.allocatedService || ""
       }));
-      setTshirtChecked(String(payload.data?.volunteer?.tshirt || "").trim().toLowerCase() === "yes");
+      setTshirtChecked(Boolean(payload.data?.volunteer?.tshirt));
       if (payload.data?.found) {
         setLookupStage(payload.data.allocated ? "allocated" : "needsService");
         setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
@@ -297,7 +297,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       }
       setSearchResult(latest);
       setServiceMismatch(false);
-      setTshirtChecked(String(latest.volunteer?.tshirt || "").trim().toLowerCase() === "yes");
+      setTshirtChecked(Boolean(latest.volunteer?.tshirt));
       setLookupStage("serviceSelected");
       setMessage("");
     } catch (error) {
@@ -328,13 +328,13 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       const response = await fetch("/api/bridge", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "volunteers.tshirt", mobile: tshirtMobile, tShirt: "Yes" })
+        body: JSON.stringify({ action: "volunteers.tshirt", mobile: tshirtMobile, tshirt: true })
       });
       const payload = await readJsonResponse(response);
       if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not update T Shirt status");
       setSearchResult((current) => ({
         ...current,
-        volunteer: current.volunteer ? { ...current.volunteer, tshirt: "Yes" } : current.volunteer
+        volunteer: current.volunteer ? { ...current.volunteer, tshirt: true } : current.volunteer
       }));
       setTshirtChecked(true);
       setServiceMismatch(false);
