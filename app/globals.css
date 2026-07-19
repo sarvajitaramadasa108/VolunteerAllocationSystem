@@ -391,6 +391,30 @@ button:disabled {
   color: var(--text);
 }
 
+.registration-hero {
+  background:
+    linear-gradient(145deg, rgba(82, 42, 22, 0.96), rgba(142, 88, 34, 0.92)),
+    radial-gradient(circle at 82% 14%, rgba(255, 210, 120, 0.18), transparent 28%);
+}
+
+.registration-hero .eyebrow,
+.registration-hero h1,
+.registration-hero .hero-copy {
+  color: var(--white);
+}
+
+.registration-hero .hero-copy {
+  opacity: 0.92;
+}
+
+.registration-summary {
+  margin-top: 6px;
+}
+
+.registration-summary strong {
+  word-break: break-word;
+}
+
 .home-button {
   display: inline-flex;
   align-items: center;

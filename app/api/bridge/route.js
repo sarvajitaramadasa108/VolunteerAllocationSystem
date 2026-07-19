@@ -73,6 +73,16 @@ function buildServiceMap(rows) {
   return map;
 }
 
+function volunteerMissingFields(row = {}) {
+  const missing = [];
+  if (!String(row?.name || "").trim()) missing.push("name");
+  if (!String(row?.gender || "").trim()) missing.push("gender");
+  if (row?.age === null || row?.age === undefined || String(row?.age || "").trim() === "") missing.push("age");
+  if (!String(row?.college_working || "").trim()) missing.push("occupation");
+  if (!String(row?.area_of_stay || "").trim()) missing.push("areaOfStay");
+  return missing;
+}
+
 async function listServices() {
   const supabase = getSupabase();
   const [servicesResult, volunteersResult] = await Promise.all([
@@ -116,6 +126,8 @@ async function searchVolunteer(payload = {}) {
     return {
       found: false,
       allocated: false,
+      complete: false,
+      missingFields: ["name", "gender", "age", "occupation", "areaOfStay"],
       volunteer: null,
       serviceDetails: null
     };
@@ -132,9 +144,12 @@ async function searchVolunteer(payload = {}) {
   }
 
   const volunteer = mapVolunteer(volunteerRow, servicesByName);
+  const missingFields = volunteerMissingFields(volunteerRow);
   return {
     found: true,
     allocated: Boolean(volunteer.allocatedService),
+    complete: missingFields.length === 0,
+    missingFields,
     volunteer,
     serviceDetails: volunteer.serviceDetails
   };
@@ -221,7 +236,8 @@ async function upsertVolunteer(payload = {}, options = {}) {
   return {
     saved: true,
     volunteer,
-    complete: Boolean(volunteer.name && volunteer.gender && volunteer.age !== "" && volunteer.occupation && volunteer.areaOfStay),
+    complete: volunteerMissingFields(volunteerResult.data).length === 0,
+    missingFields: volunteerMissingFields(volunteerResult.data),
     allocated: Boolean(volunteer.allocatedService),
     serviceDetails: volunteer.serviceDetails
   };

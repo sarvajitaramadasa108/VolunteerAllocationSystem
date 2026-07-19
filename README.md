@@ -11,6 +11,7 @@ Volunteer allocation UI backed by Supabase.
 
 ## Pages
 
+- `/register` - volunteer pre-registration for the Bahuda Ratha Yatra
 - `/allocate` - search, register, and allocate service
-- `/lookup` - volunteer self-check page
+- `/lookup` - event-day volunteer self-check page
 - `/dashboard` - service-wise volunteer export

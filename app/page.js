@@ -14,17 +14,21 @@ export default function HomePage() {
       </section>
 
       <section className="card-grid">
-        <Link className="card-link" href="/allocate">
-          <h2>Allocation Desk</h2>
-          <p>Search by mobile, see volunteer details, and assign a service.</p>
+        <Link className="card-link" href="/register">
+          <h2>Pre Registration</h2>
+          <p>Search by mobile, complete missing details, and save volunteer registrations.</p>
         </Link>
         <Link className="card-link" href="/lookup">
-          <h2>Volunteer Check</h2>
-          <p>Enter a mobile number to see the allocated service and coordinator details.</p>
+          <h2>Event Day Lookup</h2>
+          <p>Use on the event day to see the allocated service and coordinator details.</p>
         </Link>
         <Link className="card-link" href="/dashboard">
           <h2>Dashboard</h2>
           <p>Download the volunteers allotted for any service.</p>
+        </Link>
+        <Link className="card-link" href="/allocate">
+          <h2>Allocation Desk</h2>
+          <p>Admin-only desk for assigning services after registration.</p>
         </Link>
       </section>
 
