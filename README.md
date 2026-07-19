@@ -6,12 +6,13 @@ Volunteer allocation UI backed by Supabase.
 
 1. Create a Supabase project.
 2. Apply the volunteer schema and seed data to Supabase.
-3. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Vercel or local env.
-4. Run the Next.js app.
+3. Apply `supabase/bahuda_registration_schema.sql` for Bahuda Rathayatra registrations.
+4. Set `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` in Vercel or local env.
+5. Run the Next.js app.
 
 ## Pages
 
-- `/register` - volunteer pre-registration for the Bahuda Ratha Yatra
+- `/register` - volunteer registrations for Sri Jagannath Bahuda Rathayatra
 - `/allocate` - search, register, and allocate service
 - `/lookup` - event-day volunteer self-check page
 - `/dashboard` - service-wise volunteer export

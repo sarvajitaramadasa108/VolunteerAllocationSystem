@@ -3,12 +3,14 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
-const EVENT_TITLE = "Jagannatha Bahuda Ratha Yatra";
-const EVENT_DETAILS = "24th July 2026, 4 PM onwards · Sri Vaibhava Venkateswara Swamy Temple, Madhavadhara";
-const EVENT_NOTE = "Pre-register now so your volunteer details are ready before the event day.";
-const FIELD_ORDER = ["name", "gender", "age", "occupation", "areaOfStay"];
+const EVENT_TITLE = "Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra";
+const EVENT_DATE = "24th July 2026, 4 PM onwards";
+const EVENT_VENUE = "Sri Vaibhava Venkateswara Swamy Temple, Madhavadhara";
+const EVENT_REPORTING = "Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service.";
+const EVENT_THANK_YOU = "Thank you for registering,Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service.";
 
-const FIELD_CONFIG = {
+const fieldOrder = ["name", "gender", "age", "occupation", "areaOfStay"];
+const fieldConfig = {
   name: { label: "Name", type: "text", placeholder: "Volunteer name" },
   gender: { label: "Gender", type: "text", placeholder: "Gender" },
   age: { label: "Age", type: "number", placeholder: "Age" },
@@ -19,9 +21,8 @@ const FIELD_CONFIG = {
 const emptyLookup = {
   found: false,
   complete: false,
-  allocated: false,
   missingFields: [],
-  volunteer: null
+  registration: null
 };
 
 export default function VolunteerRegistrationForm() {
@@ -39,11 +40,11 @@ export default function VolunteerRegistrationForm() {
   });
 
   useEffect(() => {
-    document.title = `${EVENT_TITLE} - Pre Registration`;
+    document.title = EVENT_TITLE;
   }, []);
 
   const missingFields = useMemo(() => lookup.missingFields || [], [lookup.missingFields]);
-  const visibleFields = lookup.found ? missingFields : FIELD_ORDER;
+  const visibleFields = lookup.found ? missingFields : fieldOrder;
   const isComplete = Boolean(lookup.found && lookup.complete);
 
   function normalizeMobile(value) {
@@ -52,15 +53,6 @@ export default function VolunteerRegistrationForm() {
     if (digits.length === 12 && digits.startsWith("91")) return digits.slice(-10);
     if (digits.length > 10) return digits.slice(-10);
     return digits;
-  }
-
-  function escapeHtml(value) {
-    return String(value ?? "")
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#39;");
   }
 
   async function readJsonResponse(response) {
@@ -72,8 +64,8 @@ export default function VolunteerRegistrationForm() {
     }
   }
 
-  function resetAll(nextMobile = "") {
-    setMobile(nextMobile);
+  function resetForm() {
+    setMobile("");
     setSearching(false);
     setSaving(false);
     setMessage("");
@@ -87,17 +79,17 @@ export default function VolunteerRegistrationForm() {
     });
   }
 
-  function seedFormFromVolunteer(volunteer) {
+  function seedFormFromRegistration(registration) {
     setForm({
-      name: String(volunteer?.name || ""),
-      gender: String(volunteer?.gender || ""),
-      age: volunteer?.age === null || volunteer?.age === undefined || volunteer?.age === "" ? "" : String(volunteer.age),
-      occupation: String(volunteer?.occupation || volunteer?.collegeWorking || ""),
-      areaOfStay: String(volunteer?.areaOfStay || "")
+      name: String(registration?.name || ""),
+      gender: String(registration?.gender || ""),
+      age: registration?.age === null || registration?.age === undefined || registration?.age === "" ? "" : String(registration.age),
+      occupation: String(registration?.occupation || ""),
+      areaOfStay: String(registration?.areaOfStay || "")
     });
   }
 
-  async function searchVolunteer(event) {
+  async function searchRegistration(event) {
     event.preventDefault();
     const normalized = normalizeMobile(mobile);
     if (normalized.length !== 10) {
@@ -112,9 +104,8 @@ export default function VolunteerRegistrationForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "volunteers.search",
-          mobile: normalized,
-          markAttendance: false
+          action: "bahudaRegistrations.lookup",
+          mobile: normalized
         })
       });
       const payload = await readJsonResponse(response);
@@ -125,14 +116,14 @@ export default function VolunteerRegistrationForm() {
       const result = payload.data || emptyLookup;
       setLookup(result);
       setMobile(normalized);
-      seedFormFromVolunteer(result.volunteer);
+      seedFormFromRegistration(result.registration);
 
       if (!result.found) {
         setMessage("Mobile number not found. Please complete the registration form below.");
       } else if (result.complete) {
-        setMessage("You have already registered for the services.");
+        setMessage(`You are already registered for the services. Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service`);
       } else {
-        const missingLabels = (result.missingFields || []).map((field) => FIELD_CONFIG[field]?.label || field);
+        const missingLabels = (result.missingFields || []).map((field) => fieldConfig[field]?.label || field);
         setMessage(`Please complete your registration. Missing fields: ${missingLabels.join(", ")}.`);
       }
     } catch (error) {
@@ -143,15 +134,15 @@ export default function VolunteerRegistrationForm() {
     }
   }
 
-  function mergePayloadFromCurrentState() {
-    const volunteer = lookup.volunteer || {};
+  function mergePayload() {
+    const registration = lookup.registration || {};
     return {
       mobileNumber: normalizeMobile(mobile),
-      name: form.name || volunteer.name || "",
-      gender: form.gender || volunteer.gender || "",
-      age: form.age || volunteer.age || "",
-      collegeWorking: form.occupation || volunteer.occupation || volunteer.collegeWorking || "",
-      areaOfStay: form.areaOfStay || volunteer.areaOfStay || ""
+      name: form.name || registration.name || "",
+      gender: form.gender || registration.gender || "",
+      age: form.age || registration.age || "",
+      collegeWorking: form.occupation || registration.occupation || "",
+      areaOfStay: form.areaOfStay || registration.areaOfStay || ""
     };
   }
 
@@ -163,8 +154,8 @@ export default function VolunteerRegistrationForm() {
       return;
     }
 
-    const required = lookup.found ? missingFields : FIELD_ORDER;
-    const payload = mergePayloadFromCurrentState();
+    const payload = mergePayload();
+    const required = lookup.found ? missingFields : fieldOrder;
     const missingNow = required.filter((field) => {
       if (field === "name") return !String(payload.name || "").trim();
       if (field === "gender") return !String(payload.gender || "").trim();
@@ -173,8 +164,9 @@ export default function VolunteerRegistrationForm() {
       if (field === "areaOfStay") return !String(payload.areaOfStay || "").trim();
       return false;
     });
+
     if (missingNow.length) {
-      setMessage(`Please fill: ${missingNow.map((field) => FIELD_CONFIG[field]?.label || field).join(", ")}`);
+      setMessage(`Please fill: ${missingNow.map((field) => fieldConfig[field]?.label || field).join(", ")}`);
       return;
     }
 
@@ -185,9 +177,8 @@ export default function VolunteerRegistrationForm() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          action: "volunteers.upsert",
-          ...payload,
-          markAttendance: false
+          action: "bahudaRegistrations.upsert",
+          ...payload
         })
       });
       const result = await readJsonResponse(response);
@@ -197,13 +188,12 @@ export default function VolunteerRegistrationForm() {
 
       setLookup({
         found: true,
-        complete: true,
-        allocated: Boolean(result.data?.allocated),
-        missingFields: [],
-        volunteer: result.data?.volunteer || null
+        complete: Boolean(result.data?.complete),
+        missingFields: result.data?.missingFields || [],
+        registration: result.data?.registration || null
       });
-      seedFormFromVolunteer(result.data?.volunteer);
-      setMessage("Registration successful. Thank you for pre-registering for the volunteer services.");
+      seedFormFromRegistration(result.data?.registration);
+      setMessage(EVENT_THANK_YOU);
     } catch (error) {
       setMessage(error.message || "Could not save registration");
     } finally {
@@ -211,13 +201,13 @@ export default function VolunteerRegistrationForm() {
     }
   }
 
-  const existingRows = lookup.volunteer ? [
-    { label: "Name", value: lookup.volunteer.name },
-    { label: "Gender", value: lookup.volunteer.gender },
-    { label: "Age", value: lookup.volunteer.age },
-    { label: "College / Working", value: lookup.volunteer.occupation || lookup.volunteer.collegeWorking },
-    { label: "Area of Stay", value: lookup.volunteer.areaOfStay },
-    { label: "Allocated Service", value: lookup.volunteer.allocatedServiceName || "-" }
+  const existingRows = lookup.registration ? [
+    { label: "Mobile Number", value: lookup.registration.mobileNumber || mobile || "-" },
+    { label: "Name", value: lookup.registration.name || "-" },
+    { label: "Gender", value: lookup.registration.gender || "-" },
+    { label: "Age", value: lookup.registration.age || "-" },
+    { label: "College / Working", value: lookup.registration.occupation || "-" },
+    { label: "Area of Stay", value: lookup.registration.areaOfStay || "-" }
   ] : [];
 
   return (
@@ -225,27 +215,25 @@ export default function VolunteerRegistrationForm() {
       <header className="topbar">
         <div>
           <p className="eyebrow">Volunteer Allocation System</p>
-          <h1>Volunteer Pre Registration</h1>
-          <p className="subtle">{EVENT_DETAILS}</p>
+          <p className="subtle">Bahuda Rathayatra volunteer registrations</p>
         </div>
         <nav className="topnav">
           <Link href="/">Home</Link>
           <Link href="/lookup">Day-of Lookup</Link>
-          <Link href="/dashboard">Dashboard</Link>
         </nav>
       </header>
 
       <section className="hero registration-hero">
-        <p className="eyebrow">{EVENT_TITLE}</p>
-        <h1>Pre-register volunteer details</h1>
+        <p className="eyebrow">Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra</p>
+        <h1>Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra</h1>
         <p className="hero-copy">
-          Mobile-first registration for the Bahuda Ratha Yatra volunteer list.
-          Search your number first, complete only the missing details, and save your profile in Supabase.
+          Date: {EVENT_DATE}<br />
+          Venue: {EVENT_VENUE}
         </p>
       </section>
 
       <section className="panel">
-        <form className="form-grid" onSubmit={searchVolunteer}>
+        <form className="form-grid" onSubmit={searchRegistration}>
           <label className="field wide">
             <span>Mobile Number</span>
             <input
@@ -260,8 +248,8 @@ export default function VolunteerRegistrationForm() {
             />
           </label>
           <div className="actions">
-            <button type="submit" disabled={searching}>{searching ? "Searching..." : "Search"}</button>
-            <button type="button" className="home-button" onClick={() => resetAll("")}>Reset</button>
+            <button type="submit" disabled={searching}>{searching ? "Searching..." : "Submit"}</button>
+            <button type="button" className="home-button" onClick={resetForm}>Reset</button>
           </div>
         </form>
       </section>
@@ -269,12 +257,11 @@ export default function VolunteerRegistrationForm() {
       {message ? <section className="notice">{message}</section> : null}
 
       <section className="panel">
-        {lookup.found && lookup.volunteer ? (
+        {lookup.found && lookup.registration ? (
           <div className="stack">
             <div className="service-card">
-              <h2>{isComplete ? "You have already registered" : "Existing details found"}</h2>
+              <h2>{isComplete ? "You are already registered" : "Please complete your registration"}</h2>
               <div className="summary-grid registration-summary">
-                <div><span>Mobile Number</span><strong>{lookup.volunteer.mobileNumber || mobile || "-"}</strong></div>
                 {existingRows.map((row) => (
                   <div key={row.label}>
                     <span>{row.label}</span>
@@ -287,8 +274,9 @@ export default function VolunteerRegistrationForm() {
             {!isComplete ? (
               <form className="form-grid" onSubmit={submitRegistration}>
                 {visibleFields.map((field) => {
-                  const config = FIELD_CONFIG[field];
+                  const config = fieldConfig[field];
                   if (!config) return null;
+
                   return (
                     <label className={`field ${field === "areaOfStay" ? "wide" : ""}`} key={field}>
                       <span>{config.label}</span>
@@ -305,7 +293,7 @@ export default function VolunteerRegistrationForm() {
                       ) : (
                         <input
                           type={config.type}
-                          value={form[field === "occupation" ? "occupation" : field]}
+                          value={field === "occupation" ? form.occupation : form[field]}
                           onChange={(event) => setForm((current) => ({
                             ...current,
                             [field === "occupation" ? "occupation" : field]: event.target.value
@@ -324,8 +312,8 @@ export default function VolunteerRegistrationForm() {
           </div>
         ) : lookup.found === false && mobile ? (
           <form className="form-grid" onSubmit={submitRegistration}>
-            {FIELD_ORDER.map((field) => {
-              const config = FIELD_CONFIG[field];
+            {fieldOrder.map((field) => {
+              const config = fieldConfig[field];
               return (
                 <label className={`field ${field === "areaOfStay" ? "wide" : ""}`} key={field}>
                   <span>{config.label}</span>
@@ -342,7 +330,7 @@ export default function VolunteerRegistrationForm() {
                   ) : (
                     <input
                       type={config.type}
-                      value={form[field === "occupation" ? "occupation" : field]}
+                      value={field === "occupation" ? form.occupation : form[field]}
                       onChange={(event) => setForm((current) => ({
                         ...current,
                         [field === "occupation" ? "occupation" : field]: event.target.value
@@ -359,21 +347,11 @@ export default function VolunteerRegistrationForm() {
           </form>
         ) : (
           <div className="empty-state">
-            <p>Search a mobile number to start the pre-registration flow.</p>
+            <p>Search a mobile number to start registration.</p>
           </div>
         )}
       </section>
 
-      <section className="panel">
-        <div className="panel-head">
-          <h2>Event Details</h2>
-        </div>
-        <div className="summary-grid registration-summary">
-          <div><span>Event</span><strong>{EVENT_TITLE}</strong></div>
-          <div><span>Schedule</span><strong>{EVENT_DETAILS}</strong></div>
-          <div><span>Note</span><strong>{EVENT_NOTE}</strong></div>
-        </div>
-      </section>
     </main>
   );
 }

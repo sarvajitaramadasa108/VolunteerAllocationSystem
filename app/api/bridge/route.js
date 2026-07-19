@@ -83,6 +83,16 @@ function volunteerMissingFields(row = {}) {
   return missing;
 }
 
+function eventRegistrationMissingFields(row = {}) {
+  const missing = [];
+  if (!String(row?.name || "").trim()) missing.push("name");
+  if (!String(row?.gender || "").trim()) missing.push("gender");
+  if (row?.age === null || row?.age === undefined || String(row?.age || "").trim() === "") missing.push("age");
+  if (!String(row?.college_working || "").trim()) missing.push("occupation");
+  if (!String(row?.area_of_stay || "").trim()) missing.push("areaOfStay");
+  return missing;
+}
+
 async function listServices() {
   const supabase = getSupabase();
   const [servicesResult, volunteersResult] = await Promise.all([
@@ -290,6 +300,137 @@ async function volunteersByService(payload = {}) {
   return (volunteersResult.data || []).map((row) => mapVolunteer(row, serviceMap));
 }
 
+function eventRegistrationTableName() {
+  return "volunteer_event_registrations";
+}
+
+async function bahudaRegistrationLookup(payload = {}) {
+  const supabase = getSupabase();
+  const mobileNumber = normalizeMobileNumber(payload.mobile || payload.mobileNumber || payload.whatsappNumber || "");
+  if (!mobileNumber) {
+    throw new Error("Enter a valid mobile number");
+  }
+
+  const { data, error } = await supabase
+    .from(eventRegistrationTableName())
+    .select("*")
+    .eq("mobile_number", mobileNumber)
+    .eq("event_key", "BAHUDA_RATHAYATRA_2026")
+    .maybeSingle();
+  if (error) throw error;
+
+  if (!data) {
+    return {
+      found: false,
+      complete: false,
+      missingFields: ["name", "gender", "age", "occupation", "areaOfStay"],
+      registration: null
+    };
+  }
+
+  const missingFields = eventRegistrationMissingFields(data);
+  return {
+    found: true,
+    complete: missingFields.length === 0,
+    missingFields,
+    registration: {
+      serialNo: Number(data.serial_no || 0),
+      mobileNumber: String(data.mobile_number || "").trim(),
+      name: String(data.name || "").trim(),
+      gender: String(data.gender || "").trim(),
+      age: data.age === null || data.age === undefined ? "" : Number(data.age),
+      occupation: String(data.college_working || "").trim(),
+      areaOfStay: String(data.area_of_stay || "").trim(),
+      eventName: String(data.event_name || "").trim()
+    }
+  };
+}
+
+async function nextEventRegistrationSerialNo(supabase) {
+  const { data, error } = await supabase
+    .from(eventRegistrationTableName())
+    .select("serial_no")
+    .eq("event_key", "BAHUDA_RATHAYATRA_2026")
+    .order("serial_no", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const latest = data && data[0] ? Number(data[0].serial_no || 0) : 0;
+  return latest + 1;
+}
+
+async function bahudaRegistrationUpsert(payload = {}) {
+  const supabase = getSupabase();
+  const mobileNumber = normalizeMobileNumber(payload.mobile || payload.mobileNumber || payload.whatsappNumber || "");
+  if (!mobileNumber) {
+    throw new Error("Enter a valid mobile number");
+  }
+
+  const existingResult = await supabase
+    .from(eventRegistrationTableName())
+    .select("*")
+    .eq("mobile_number", mobileNumber)
+    .eq("event_key", "BAHUDA_RATHAYATRA_2026")
+    .maybeSingle();
+  if (existingResult.error) throw existingResult.error;
+
+  const existing = existingResult.data;
+  const merged = {
+    serial_no: existing ? Number(existing.serial_no || 0) : await nextEventRegistrationSerialNo(supabase),
+    event_key: "BAHUDA_RATHAYATRA_2026",
+    event_name: "Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra",
+    mobile_number: mobileNumber,
+    name: String(payload.name || existing?.name || "").trim(),
+    gender: String(payload.gender || existing?.gender || "").trim(),
+    age: payload.age === undefined || payload.age === null || payload.age === ""
+      ? (existing?.age ?? null)
+      : Number.parseInt(payload.age, 10),
+    college_working: String(payload.collegeWorking || payload.occupation || existing?.college_working || "").trim(),
+    area_of_stay: String(payload.areaOfStay || existing?.area_of_stay || "").trim(),
+    event_date_text: "24th July 2026, 4 PM onwards",
+    venue_text: "Sri Vaibhava Venkateswara Swamy Temple, Madhavadhara"
+  };
+
+  if (merged.age !== null && merged.age !== undefined && Number.isNaN(merged.age)) {
+    throw new Error("Age must be a number");
+  }
+
+  const upsertRow = {
+    serial_no: merged.serial_no,
+    event_key: merged.event_key,
+    event_name: merged.event_name,
+    mobile_number: merged.mobile_number,
+    name: merged.name,
+    gender: merged.gender,
+    age: merged.age,
+    college_working: merged.college_working,
+    area_of_stay: merged.area_of_stay
+  };
+
+  const { error } = existing
+    ? await supabase.from(eventRegistrationTableName()).update(upsertRow).eq("mobile_number", mobileNumber).eq("event_key", merged.event_key)
+    : await supabase.from(eventRegistrationTableName()).insert(upsertRow);
+  if (error) throw error;
+
+  const registration = {
+    serialNo: merged.serial_no,
+    mobileNumber: merged.mobile_number,
+    name: merged.name,
+    gender: merged.gender,
+    age: merged.age === null || merged.age === undefined ? "" : merged.age,
+    occupation: merged.college_working,
+    areaOfStay: merged.area_of_stay,
+    eventName: merged.event_name,
+    eventDateText: merged.event_date_text,
+    venueText: merged.venue_text
+  };
+  return {
+    saved: true,
+    registration,
+    complete: eventRegistrationMissingFields(upsertRow).length === 0,
+    missingFields: eventRegistrationMissingFields(upsertRow)
+  };
+}
+
 async function handler(request) {
   const url = new URL(request.url);
   const actionFromQuery = String(url.searchParams.get("action") || "").trim();
@@ -316,10 +457,20 @@ async function handler(request) {
         return Response.json({ ok: true, data: await markTshirt(payload) });
       case "volunteers.byService":
         return Response.json({ ok: true, data: await volunteersByService(payload) });
+      case "bahudaRegistrations.lookup":
+        return Response.json({ ok: true, data: await bahudaRegistrationLookup(payload) });
+      case "bahudaRegistrations.upsert":
+        return Response.json({ ok: true, data: await bahudaRegistrationUpsert(payload) });
       default:
         return Response.json({ ok: false, error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (error) {
+    if (error?.code === "42P01" || String(error?.message || "").includes("volunteer_event_registrations")) {
+      return Response.json({
+        ok: false,
+        error: "Bahuda registration schema is not applied yet. Please run supabase/bahuda_registration_schema.sql in Supabase."
+      }, { status: 500 });
+    }
     return Response.json({ ok: false, error: error.message || "Server error" }, { status: 500 });
   }
 }
