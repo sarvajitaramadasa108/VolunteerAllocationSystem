@@ -38,7 +38,7 @@ async function readJsonResponse(response) {
   }
 }
 
-export default function VolunteerFlow({ mode, title, intro, actionLabel, successLabel }) {
+export default function VolunteerFlow({ mode, title, intro, actionLabel, successLabel, showNav = true }) {
   const [services, setServices] = useState([]);
   const [mobile, setMobile] = useState("");
   const [searching, setSearching] = useState(false);
@@ -354,11 +354,13 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           <h1>{title}</h1>
           <p className="subtle">{intro}</p>
         </div>
-        <nav className="topnav">
-          {mode === "allocate" ? <Link href="/">Home</Link> : null}
-          {mode === "allocate" ? <Link href="/allocate">Allocate</Link> : null}
-          {mode === "allocate" ? <Link href="/lookup">Lookup</Link> : null}
-        </nav>
+        {showNav ? (
+          <nav className="topnav">
+            {mode === "allocate" ? <Link href="/">Home</Link> : null}
+            {mode === "allocate" ? <Link href="/allocate">Allocate</Link> : null}
+            {mode === "allocate" ? <Link href="/lookup">Lookup</Link> : null}
+          </nav>
+        ) : null}
       </header>
 
       <section className="panel">

@@ -21,16 +21,27 @@ create table if not exists public.volunteer_event_registrations (
   age integer,
   college_working text,
   area_of_stay text,
+  allocated_service_name text,
+  attendance boolean not null default false,
+  tshirt boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint volunteer_event_registrations_event_mobile_key unique (event_key, mobile_number)
 );
 
 alter table public.volunteer_event_registrations
+  add column if not exists allocated_service_name text,
+  add column if not exists attendance boolean not null default false,
+  add column if not exists tshirt boolean not null default false;
+
+alter table public.volunteer_event_registrations
   alter column name drop not null,
   alter column gender drop not null,
   alter column college_working drop not null,
-  alter column area_of_stay drop not null;
+  alter column area_of_stay drop not null,
+  alter column allocated_service_name drop not null,
+  alter column attendance set default false,
+  alter column tshirt set default false;
 
 create index if not exists idx_volunteer_event_registrations_event_mobile on public.volunteer_event_registrations (event_key, mobile_number);
 create index if not exists idx_volunteer_event_registrations_event_serial on public.volunteer_event_registrations (event_key, serial_no);

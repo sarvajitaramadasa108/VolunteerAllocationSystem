@@ -1,12 +1,10 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 
 const EVENT_TITLE = "Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra";
-const EVENT_DATE = "24th July 2026, 4 PM onwards";
+const EVENT_DATE = "24th July 2026, 4 PM Onwards";
 const EVENT_VENUE = "Sri Vaibhava Venkateswara Swamy Temple, Madhavadhara";
-const EVENT_REPORTING = "Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service.";
 const EVENT_THANK_YOU = "Thank you for registering,Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service.";
 
 const fieldOrder = ["name", "gender", "age", "occupation", "areaOfStay"];
@@ -25,19 +23,41 @@ const emptyLookup = {
   registration: null
 };
 
+function normalizeMobile(value) {
+  const digits = String(value || "").replace(/\D/g, "");
+  if (!digits) return "";
+  if (digits.length === 12 && digits.startsWith("91")) return digits.slice(-10);
+  if (digits.length > 10) return digits.slice(-10);
+  return digits;
+}
+
+async function readJsonResponse(response) {
+  const text = await response.text();
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(text?.startsWith("<!DOCTYPE") ? "Backend returned HTML instead of JSON" : text || "Backend returned an invalid response");
+  }
+}
+
+function emptyForm() {
+  return {
+    name: "",
+    gender: "",
+    age: "",
+    occupation: "",
+    areaOfStay: ""
+  };
+}
+
 export default function VolunteerRegistrationForm() {
   const [mobile, setMobile] = useState("");
   const [searching, setSearching] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState("");
   const [lookup, setLookup] = useState(emptyLookup);
-  const [form, setForm] = useState({
-    name: "",
-    gender: "",
-    age: "",
-    occupation: "",
-    areaOfStay: ""
-  });
+  const [form, setForm] = useState(emptyForm());
+  const [registrationComplete, setRegistrationComplete] = useState(false);
 
   useEffect(() => {
     document.title = EVENT_TITLE;
@@ -46,37 +66,16 @@ export default function VolunteerRegistrationForm() {
   const missingFields = useMemo(() => lookup.missingFields || [], [lookup.missingFields]);
   const visibleFields = lookup.found ? missingFields : fieldOrder;
   const isComplete = Boolean(lookup.found && lookup.complete);
+  const showForm = !registrationComplete && (!lookup.found || !isComplete);
 
-  function normalizeMobile(value) {
-    const digits = String(value || "").replace(/\D/g, "");
-    if (!digits) return "";
-    if (digits.length === 12 && digits.startsWith("91")) return digits.slice(-10);
-    if (digits.length > 10) return digits.slice(-10);
-    return digits;
-  }
-
-  async function readJsonResponse(response) {
-    const text = await response.text();
-    try {
-      return JSON.parse(text);
-    } catch {
-      throw new Error(text?.startsWith("<!DOCTYPE") ? "Backend returned HTML instead of JSON" : text || "Backend returned an invalid response");
-    }
-  }
-
-  function resetForm() {
-    setMobile("");
+  function clearCurrentResult(nextMobile = "") {
+    setMobile(nextMobile);
     setSearching(false);
     setSaving(false);
     setMessage("");
     setLookup(emptyLookup);
-    setForm({
-      name: "",
-      gender: "",
-      age: "",
-      occupation: "",
-      areaOfStay: ""
-    });
+    setForm(emptyForm());
+    setRegistrationComplete(false);
   }
 
   function seedFormFromRegistration(registration) {
@@ -98,6 +97,7 @@ export default function VolunteerRegistrationForm() {
     }
 
     setSearching(true);
+    setRegistrationComplete(false);
     setMessage("Searching...");
     try {
       const response = await fetch("/api/bridge", {
@@ -119,7 +119,7 @@ export default function VolunteerRegistrationForm() {
       seedFormFromRegistration(result.registration);
 
       if (!result.found) {
-        setMessage("Mobile number not found. Please complete the registration form below.");
+        setMessage("Mobile number not found. Please complete your registration.");
       } else if (result.complete) {
         setMessage(`You are already registered for the services. Please report at 3pm at the volunteer reception at the venue on the event date to know your allocated service`);
       } else {
@@ -193,6 +193,7 @@ export default function VolunteerRegistrationForm() {
         registration: result.data?.registration || null
       });
       seedFormFromRegistration(result.data?.registration);
+      setRegistrationComplete(true);
       setMessage(EVENT_THANK_YOU);
     } catch (error) {
       setMessage(error.message || "Could not save registration");
@@ -201,36 +202,15 @@ export default function VolunteerRegistrationForm() {
     }
   }
 
-  const existingRows = lookup.registration ? [
-    { label: "Mobile Number", value: lookup.registration.mobileNumber || mobile || "-" },
-    { label: "Name", value: lookup.registration.name || "-" },
-    { label: "Gender", value: lookup.registration.gender || "-" },
-    { label: "Age", value: lookup.registration.age || "-" },
-    { label: "College / Working", value: lookup.registration.occupation || "-" },
-    { label: "Area of Stay", value: lookup.registration.areaOfStay || "-" }
-  ] : [];
-
   return (
     <main className="page-shell">
       <header className="topbar">
         <div>
           <p className="eyebrow">Volunteer Allocation System</p>
-          <p className="subtle">Bahuda Rathayatra volunteer registrations</p>
+          <h1>{EVENT_TITLE}</h1>
+          <p className="subtle">{EVENT_DATE} | {EVENT_VENUE}</p>
         </div>
-        <nav className="topnav">
-          <Link href="/">Home</Link>
-          <Link href="/lookup">Day-of Lookup</Link>
-        </nav>
       </header>
-
-      <section className="hero registration-hero">
-        <p className="eyebrow">Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra</p>
-        <h1>Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra</h1>
-        <p className="hero-copy">
-          Date: {EVENT_DATE}<br />
-          Venue: {EVENT_VENUE}
-        </p>
-      </section>
 
       <section className="panel">
         <form className="form-grid" onSubmit={searchRegistration}>
@@ -242,116 +222,78 @@ export default function VolunteerRegistrationForm() {
               placeholder="Enter mobile number"
               value={mobile}
               onChange={(event) => {
-                setMobile(event.target.value);
-                setMessage("");
+                clearCurrentResult(event.target.value);
               }}
             />
           </label>
           <div className="actions">
             <button type="submit" disabled={searching}>{searching ? "Searching..." : "Submit"}</button>
-            <button type="button" className="home-button" onClick={resetForm}>Reset</button>
           </div>
         </form>
       </section>
 
       {message ? <section className="notice">{message}</section> : null}
 
-      <section className="panel">
-        {lookup.found && lookup.registration ? (
+      {showForm ? (
+        <section className="panel">
           <div className="stack">
             <div className="service-card">
               <h2>{isComplete ? "You are already registered" : "Please complete your registration"}</h2>
-              <div className="summary-grid registration-summary">
-                {existingRows.map((row) => (
-                  <div key={row.label}>
-                    <span>{row.label}</span>
-                    <strong>{row.value || "-"}</strong>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {!isComplete ? (
-              <form className="form-grid" onSubmit={submitRegistration}>
-                {visibleFields.map((field) => {
-                  const config = fieldConfig[field];
-                  if (!config) return null;
-
-                  return (
-                    <label className={`field ${field === "areaOfStay" ? "wide" : ""}`} key={field}>
-                      <span>{config.label}</span>
-                      {field === "gender" ? (
-                        <select
-                          value={form.gender}
-                          onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
-                        >
-                          <option value="">Select gender</option>
-                          <option value="Male">Male</option>
-                          <option value="Female">Female</option>
-                          <option value="Other">Other</option>
-                        </select>
-                      ) : (
-                        <input
-                          type={config.type}
-                          value={field === "occupation" ? form.occupation : form[field]}
-                          onChange={(event) => setForm((current) => ({
-                            ...current,
-                            [field === "occupation" ? "occupation" : field]: event.target.value
-                          }))}
-                          placeholder={config.placeholder}
-                        />
-                      )}
-                    </label>
-                  );
-                })}
-                <div className="actions wide">
-                  <button type="submit" disabled={saving}>{saving ? "Saving..." : "Submit Registration"}</button>
+              {!isComplete && lookup.found ? (
+                <div className="summary-grid registration-summary">
+                  {fieldOrder.map((field) => {
+                    const value = lookup.registration?.[field === "occupation" ? "occupation" : field] || "";
+                    const label = fieldConfig[field]?.label || field;
+                    return (
+                      <div key={field}>
+                        <span>{label}</span>
+                        <strong>{value || "-"}</strong>
+                      </div>
+                    );
+                  })}
                 </div>
-              </form>
-            ) : null}
-          </div>
-        ) : lookup.found === false && mobile ? (
-          <form className="form-grid" onSubmit={submitRegistration}>
-            {fieldOrder.map((field) => {
-              const config = fieldConfig[field];
-              return (
-                <label className={`field ${field === "areaOfStay" ? "wide" : ""}`} key={field}>
-                  <span>{config.label}</span>
-                  {field === "gender" ? (
-                    <select
-                      value={form.gender}
-                      onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
-                    >
-                      <option value="">Select gender</option>
-                      <option value="Male">Male</option>
-                      <option value="Female">Female</option>
-                      <option value="Other">Other</option>
-                    </select>
-                  ) : (
-                    <input
-                      type={config.type}
-                      value={field === "occupation" ? form.occupation : form[field]}
-                      onChange={(event) => setForm((current) => ({
-                        ...current,
-                        [field === "occupation" ? "occupation" : field]: event.target.value
-                      }))}
-                      placeholder={config.placeholder}
-                    />
-                  )}
-                </label>
-              );
-            })}
-            <div className="actions wide">
-              <button type="submit" disabled={saving}>{saving ? "Saving..." : "Submit Registration"}</button>
+              ) : null}
             </div>
-          </form>
-        ) : (
-          <div className="empty-state">
-            <p>Search a mobile number to start registration.</p>
-          </div>
-        )}
-      </section>
 
+            <form className="form-grid" onSubmit={submitRegistration}>
+              {visibleFields.map((field) => {
+                const config = fieldConfig[field];
+                if (!config) return null;
+
+                return (
+                  <label className={`field ${field === "areaOfStay" ? "wide" : ""}`} key={field}>
+                    <span>{config.label}</span>
+                    {field === "gender" ? (
+                      <select
+                        value={form.gender}
+                        onChange={(event) => setForm((current) => ({ ...current, gender: event.target.value }))}
+                      >
+                        <option value="">Select gender</option>
+                        <option value="Male">Male</option>
+                        <option value="Female">Female</option>
+                        <option value="Other">Other</option>
+                      </select>
+                    ) : (
+                      <input
+                        type={config.type}
+                        value={field === "occupation" ? form.occupation : form[field]}
+                        onChange={(event) => setForm((current) => ({
+                          ...current,
+                          [field === "occupation" ? "occupation" : field]: event.target.value
+                        }))}
+                        placeholder={config.placeholder}
+                      />
+                    )}
+                  </label>
+                );
+              })}
+              <div className="actions wide">
+                <button type="submit" disabled={saving}>{saving ? "Saving..." : "Submit Registration"}</button>
+              </div>
+            </form>
+          </div>
+        </section>
+      ) : null}
     </main>
   );
 }
