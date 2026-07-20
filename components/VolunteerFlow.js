@@ -157,7 +157,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (payload.data?.found) {
         setLookupStage(payload.data.allocated ? "allocated" : "needsService");
         setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
-        setMessage(payload.data.allocated ? "Volunteer found" : "You have not been allocated any service yet. Please report at Service allocation desk.");
+        setMessage(
+          mode === "lookup" && !payload.data.allocated
+            ? "You have not been allocated any service yet. Please report at Service allocation desk."
+            : ""
+        );
       } else {
         setLookupStage("needsRegistration");
         setLookupServiceSelection("");
@@ -254,7 +258,6 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               bahudaAllocatedServiceName: form.service
             } : current.volunteer
           }));
-          setMessage(`${successLabel} for ${normalized}`);
         } else {
           resetLookupState("");
         }
@@ -551,7 +554,9 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
               <div className="notice">Searching...</div>
             ) : searchResult.found ? (
               <div className="notice">
-                Volunteer found. Jagannath service stays read-only and Bahuda service can be allocated below.
+                {actualOrChosenService
+                  ? `The allocated service for Jagannath Ratha Yatra is - "${actualOrChosenService}". Please allocate service for Bahuda Ratha Yatra.`
+                  : "No service is allocated. Please allocate now."}
               </div>
             ) : lookupSearched && !searching ? (
               <div className="notice">Mobile number not found. Please register the volunteer using the form below.</div>
@@ -559,7 +564,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
             <form className="form-grid" onSubmit={submitAllocation}>
               {searchResult.found && actualOrChosenService ? (
                 <div className="field wide">
-                  <span>Jagannath Service</span>
+                  <span>Jagannath Ratha Yatra Service</span>
                   <div className="readonly-value">{actualOrChosenService}</div>
                 </div>
               ) : null}
@@ -587,7 +592,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 <span>Please Allocate Bahuda Service</span>
                 <select value={form.service} onChange={(event) => setForm((current) => ({ ...current, service: event.target.value }))}>
                   <option value="">Select a service</option>
-                  {services.map((service) => (
+                  {services.filter((service) => service.serviceName).map((service) => (
                     <option key={service.serviceName} value={service.serviceName}>
                       {service.serviceName}
                     </option>

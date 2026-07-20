@@ -217,7 +217,7 @@ async function listServices(payload = {}) {
   const allocationField = getAllocationFieldName(payload.allocationType);
   const [servicesResult, volunteersResult] = await Promise.all([
     supabase.from("volunteer_service_master").select("*").order("serial_no", { ascending: true }),
-    supabase.from("volunteers").select(allocationField)
+    supabase.from("volunteers").select("*")
   ]);
 
   if (servicesResult.error) throw servicesResult.error;
