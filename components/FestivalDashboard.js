@@ -13,6 +13,7 @@ const emptyFestivalForm = {
 
 export default function FestivalDashboard() {
   const [festivals, setFestivals] = useState([]);
+  const [festivalServiceMap, setFestivalServiceMap] = useState({});
   const [festivalsLoading, setFestivalsLoading] = useState(true);
   const [festivalMessage, setFestivalMessage] = useState("");
   const [savingFestival, setSavingFestival] = useState(false);
@@ -33,19 +34,44 @@ export default function FestivalDashboard() {
         if (!alive) return;
         const list = Array.isArray(payload) ? payload : [];
         setFestivals(list);
-        const activeFestival = list.find((row) => row.active) || list[0] || null;
-        if (activeFestival) {
-          setSelectedFestivalKey(activeFestival.festivalKey || "");
-          setFestivalForm({
-            festivalKey: activeFestival.festivalKey || "",
-            festivalName: activeFestival.festivalName || "",
-            festivalDateText: activeFestival.festivalDateText || "",
-            locationText: activeFestival.locationText || "",
-            active: Boolean(activeFestival.active)
-          });
+        if (list.length) {
+          const preferredFestival = list.find((row) => row.festivalKey === selectedFestivalKey) || list.find((row) => row.active) || list[0] || null;
+          if (preferredFestival) {
+            setSelectedFestivalKey(preferredFestival.festivalKey || "");
+            setFestivalForm({
+              festivalKey: preferredFestival.festivalKey || "",
+              festivalName: preferredFestival.festivalName || "",
+              festivalDateText: preferredFestival.festivalDateText || "",
+              locationText: preferredFestival.locationText || "",
+              active: Boolean(preferredFestival.active)
+            });
+          }
         } else {
           setSelectedFestivalKey("");
           setFestivalForm(emptyFestivalForm);
+        }
+        const counts = {};
+        const serviceLists = await Promise.all(
+          list.map(async (festival) => {
+            const festivalKey = festival.festivalKey || "";
+            if (!festivalKey) {
+              counts[festivalKey] = { count: 0, services: [] };
+              return;
+            }
+            try {
+              const services = await fetchBridge("festivalService.list", { festivalKey });
+              const normalized = Array.isArray(services) ? services.map((row) => normalizeFestivalServiceRow(row, 0)) : [];
+              counts[festivalKey] = {
+                count: normalized.length,
+                services: normalized.map((row) => row.serviceName).filter(Boolean)
+              };
+            } catch {
+              counts[festivalKey] = { count: 0, services: [] };
+            }
+          })
+        );
+        if (alive) {
+          setFestivalServiceMap(counts);
         }
       } catch (error) {
         if (alive) {
@@ -373,6 +399,71 @@ export default function FestivalDashboard() {
             <div className="soft-panel">
               <div className="form-grid festival-form-grid">
                 <label className="field wide">
+                  <span>Select Existing Festival</span>
+                  <select
+                    value={selectedFestivalKey}
+                    onChange={(event) => {
+                      const festival = festivals.find((row) => row.festivalKey === event.target.value) || null;
+                      setSelectedFestivalKey(event.target.value);
+                      if (festival) {
+                        setFestivalForm({
+                          festivalKey: festival.festivalKey || "",
+                          festivalName: festival.festivalName || "",
+                          festivalDateText: festival.festivalDateText || "",
+                          locationText: festival.locationText || "",
+                          active: Boolean(festival.active)
+                        });
+                      } else {
+                        setFestivalForm(emptyFestivalForm);
+                      }
+                    }}
+                  >
+                    <option value="">Select a festival</option>
+                    {festivals.map((festival) => (
+                      <option key={festival.festivalKey} value={festival.festivalKey}>
+                        {festival.festivalName || festival.festivalKey}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              </div>
+              <div className="hint">Pick a festival first. The service section below will manage only that festival.</div>
+              <div className="festival-summary-table-wrap">
+                <table className="summary-table festival-summary-table">
+                  <thead>
+                    <tr>
+                      <th>Festival</th>
+                      <th>Date</th>
+                      <th>Location</th>
+                      <th>Services</th>
+                      <th>Service Names</th>
+                      <th>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {festivals.length ? festivals.map((festival) => {
+                      const summary = festivalServiceMap[festival.festivalKey] || { count: 0, services: [] };
+                      return (
+                        <tr key={festival.festivalKey} className={festival.festivalKey === selectedFestivalKey ? "is-selected-row" : ""}>
+                          <td>{festival.festivalName || festival.festivalKey}</td>
+                          <td>{festival.festivalDateText || "-"}</td>
+                          <td>{festival.locationText || "-"}</td>
+                          <td>{summary.count || 0}</td>
+                          <td>{(summary.services || []).join(", ") || "-"}</td>
+                          <td>{festival.active ? "Active" : "Inactive"}</td>
+                        </tr>
+                      );
+                    }) : (
+                      <tr>
+                        <td colSpan={6} className="empty-state">No festivals created yet.</td>
+                      </tr>
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="form-grid festival-form-grid">
+                <label className="field wide">
                   <span>Festival Name</span>
                   <input value={festivalForm.festivalName} onChange={(event) => updateFestivalForm("festivalName", event.target.value)} />
                 </label>
@@ -444,13 +535,13 @@ export default function FestivalDashboard() {
                   <p className="subtle-dark">Add, edit, remove and publish the services for this festival.</p>
                 </div>
                 <div className="row-actions">
-                  <button type="button" onClick={() => loadFestivalServicesManually(selectedFestivalKey)} disabled={festivalServiceLoading}>
+                  <button type="button" onClick={() => loadFestivalServicesManually(selectedFestivalKey)} disabled={festivalServiceLoading || !selectedFestivalKey}>
                     {festivalServiceLoading ? "Loading..." : "Refresh services"}
                   </button>
-                  <button type="button" onClick={addServiceRow}>
+                  <button type="button" onClick={addServiceRow} disabled={!selectedFestivalKey}>
                     Add Service
                   </button>
-                  <button type="button" onClick={downloadFestivalServiceExcel} disabled={!festivalServiceRows.length}>
+                  <button type="button" onClick={downloadFestivalServiceExcel} disabled={!festivalServiceRows.length || !selectedFestivalKey}>
                     Download Excel
                   </button>
                 </div>
@@ -458,7 +549,9 @@ export default function FestivalDashboard() {
 
               {festivalServiceMessage ? <section className="notice">{festivalServiceMessage}</section> : null}
 
-              {festivalServiceRows.length ? (
+              {!selectedFestivalKey ? (
+                <div className="empty-state">Select a festival first to view or edit its services.</div>
+              ) : festivalServiceRows.length ? (
                 <div className="service-master-list">
                   {festivalServiceRows.map((row, index) => {
                     const key = row._clientId || row.id || `${row.serviceName || "service"}-${index}`;
