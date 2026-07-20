@@ -86,6 +86,26 @@ function getBahudaCaseTypeFromVolunteer(row) {
   return volunteerMissingFields(row).length === 0 ? "existing_complete" : "partial_profile";
 }
 
+function mapBahudaRegistrationToActivityRow(row, serialNo) {
+  return {
+    serial_no: serialNo,
+    event_key: BAHUDA_EVENT_KEY,
+    event_name: BAHUDA_EVENT_NAME,
+    mobile_number: normalizeMobileNumber(row?.mobile_number || ""),
+    stage: "submit",
+    case_type: "backfilled_submission",
+    found: true,
+    complete: true,
+    registration_saved: true,
+    missing_fields: [],
+    name: String(row?.name || "").trim() || null,
+    gender: String(row?.gender || "").trim() || null,
+    age: row?.age === null || row?.age === undefined ? null : Number(row.age),
+    college_working: String(row?.college_working || "").trim() || null,
+    area_of_stay: String(row?.area_of_stay || "").trim() || null
+  };
+}
+
 async function recordRegistrationActivity(supabase, payload = {}) {
   const mobileNumber = normalizeMobileNumber(payload.mobile || payload.mobileNumber || "");
   if (!mobileNumber) return null;
@@ -121,6 +141,47 @@ async function recordRegistrationActivity(supabase, payload = {}) {
     if (error?.code === "42P01") return null;
     throw error;
   }
+}
+
+async function ensureBahudaSubmissionBackfill(supabase) {
+  const [logsResult, registrationsResult] = await Promise.all([
+    supabase
+      .from("volunteer_registration_activity_logs")
+      .select("mobile_number, stage, event_key")
+      .eq("event_key", BAHUDA_EVENT_KEY)
+      .eq("stage", "submit"),
+    supabase
+      .from("volunteer_event_registrations")
+      .select("*")
+      .eq("event_key", BAHUDA_EVENT_KEY)
+  ]);
+
+  if (logsResult.error) throw logsResult.error;
+  if (registrationsResult.error) throw registrationsResult.error;
+
+  const existingMobiles = new Set(
+    (logsResult.data || []).map((row) => normalizeMobileNumber(row?.mobile_number || ""))
+  );
+  const missingRegistrations = (registrationsResult.data || []).filter((row) => {
+    const mobile = normalizeMobileNumber(row?.mobile_number || "");
+    return mobile && !existingMobiles.has(mobile);
+  });
+
+  if (!missingRegistrations.length) {
+    return { backfilled: 0 };
+  }
+
+  const inserts = [];
+  let nextSerial = await nextSerialNo("volunteer_registration_activity_logs", "serial_no");
+  for (const row of missingRegistrations) {
+    inserts.push(mapBahudaRegistrationToActivityRow(row, nextSerial));
+    nextSerial += 1;
+  }
+
+  const { error } = await supabase.from("volunteer_registration_activity_logs").insert(inserts);
+  if (error) throw error;
+
+  return { backfilled: inserts.length };
 }
 
 function volunteerMatchClause(row) {
@@ -528,6 +589,11 @@ async function bahudaRegistrationUpsert(payload = {}) {
 async function listRegistrationActivities(payload = {}) {
   const supabase = getSupabase();
   const eventKey = String(payload.eventKey || BAHUDA_EVENT_KEY).trim();
+  let backfillCount = 0;
+  if (eventKey === BAHUDA_EVENT_KEY) {
+    const backfillResult = await ensureBahudaSubmissionBackfill(supabase);
+    backfillCount = Number(backfillResult.backfilled || 0);
+  }
   const { data, error } = await supabase
     .from("volunteer_registration_activity_logs")
     .select("*")
@@ -561,7 +627,9 @@ async function listRegistrationActivities(payload = {}) {
     completeLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "existing_complete").length,
     partialLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "partial_profile").length,
     newLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "new_registration").length,
-    registrationsSaved: rows.filter((row) => row.stage === "submit" && row.registrationSaved).length
+    registrationsSaved: rows.filter((row) => row.stage === "submit" && row.registrationSaved).length,
+    backfilledSubmissions: rows.filter((row) => row.stage === "submit" && row.caseType === "backfilled_submission").length,
+    backfilledOnRefresh: backfillCount
   };
 
   return { rows, summary };

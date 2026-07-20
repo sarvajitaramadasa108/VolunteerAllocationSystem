@@ -9,7 +9,9 @@ const emptyRegistrationSummary = {
   completeLookups: 0,
   partialLookups: 0,
   newLookups: 0,
-  registrationsSaved: 0
+  registrationsSaved: 0,
+  backfilledSubmissions: 0,
+  backfilledOnRefresh: 0
 };
 
 export default function AdminDashboard() {
@@ -352,7 +354,7 @@ export default function AdminDashboard() {
         </div>
 
         <div className="metric-note" style={{ marginBottom: 12 }}>
-          Searches: {registrationSummary.totalSearches} | Submissions: {registrationSummary.totalSubmissions} | Existing: {registrationSummary.completeLookups} | Partial: {registrationSummary.partialLookups} | New: {registrationSummary.newLookups}
+          Searches: {registrationSummary.totalSearches} | Submissions: {registrationSummary.totalSubmissions} | Existing: {registrationSummary.completeLookups} | Partial: {registrationSummary.partialLookups} | New: {registrationSummary.newLookups} | Backfilled: {registrationSummary.backfilledSubmissions}
         </div>
 
         {registrationMessage ? <section className="notice">{registrationMessage}</section> : null}
