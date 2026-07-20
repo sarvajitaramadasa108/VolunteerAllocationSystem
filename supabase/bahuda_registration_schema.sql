@@ -31,6 +31,7 @@ create table if not exists public.volunteer_event_registrations (
 
 alter table public.volunteer_event_registrations
   add column if not exists allocated_service_name text,
+  add column if not exists bahuda_allocated_service_name text,
   add column if not exists attendance boolean not null default false,
   add column if not exists tshirt boolean not null default false;
 
@@ -40,6 +41,7 @@ alter table public.volunteer_event_registrations
   alter column college_working drop not null,
   alter column area_of_stay drop not null,
   alter column allocated_service_name drop not null,
+  alter column bahuda_allocated_service_name drop not null,
   alter column attendance set default false,
   alter column tshirt set default false;
 
@@ -107,3 +109,6 @@ on public.volunteer_registration_activity_logs
 for all
 using (true)
 with check (true);
+
+alter table public.volunteers
+  add column if not exists bahuda_allocated_service_name text;

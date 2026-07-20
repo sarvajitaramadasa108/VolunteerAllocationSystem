@@ -67,9 +67,14 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     [services, form.service]
   );
   const actualOrChosenService = searchResult.volunteer?.allocatedService || "";
+  const bahudaAllocatedService = searchResult.volunteer?.bahudaAllocatedService || "";
   const actualOrChosenServiceDetails = useMemo(
     () => services.find((service) => service.serviceName === actualOrChosenService) || null,
     [services, actualOrChosenService]
+  );
+  const bahudaServiceDetails = useMemo(
+    () => services.find((service) => service.serviceName === bahudaAllocatedService) || null,
+    [services, bahudaAllocatedService]
   );
   const tshirtEligible = tshirtServiceNames.has(String(actualOrChosenService || "").trim());
   const tshirtAlreadyMarked = Boolean(searchResult.volunteer?.tshirt);
@@ -93,7 +98,8 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
 
   async function loadServices() {
     try {
-      const response = await fetch("/api/bridge?action=services.list", { cache: "no-store" });
+      const allocationType = mode === "allocate" ? "bahuda" : "ratha";
+      const response = await fetch(`/api/bridge?action=services.list&allocationType=${allocationType}`, { cache: "no-store" });
       const data = await readJsonResponse(response);
       setServices(Array.isArray(data.data) ? data.data : []);
     } catch {
@@ -145,7 +151,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         gender: payload.data?.volunteer?.gender || "",
         occupation: payload.data?.volunteer?.occupation || "",
         areaOfStay: payload.data?.volunteer?.areaOfStay || "",
-        service: payload.data?.volunteer?.allocatedService || ""
+        service: mode === "allocate" ? "" : payload.data?.volunteer?.allocatedService || ""
       }));
       setTshirtChecked(Boolean(payload.data?.volunteer?.tshirt));
       if (payload.data?.found) {
@@ -200,6 +206,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         occupation: form.occupation,
         areaOfStay: form.areaOfStay,
         service: form.service,
+        allocationType: mode === "allocate" ? "bahuda" : "ratha",
         markAttendance: mode === "lookup"
       };
 
@@ -238,7 +245,19 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         setServiceMismatch(false);
         setTshirtChecked(false);
       } else {
-        resetLookupState("");
+        if (mode === "allocate" && searchResult.found) {
+          setSearchResult((current) => ({
+            ...current,
+            volunteer: current.volunteer ? {
+              ...current.volunteer,
+              bahudaAllocatedService: form.service,
+              bahudaAllocatedServiceName: form.service
+            } : current.volunteer
+          }));
+          setMessage(`${successLabel} for ${normalized}`);
+        } else {
+          resetLookupState("");
+        }
       }
 
       setForm({
@@ -279,6 +298,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not verify service");
       const latest = payload.data || emptySearchResult;
       const actualService = String(latest.volunteer?.allocatedService || "").trim();
+      const bahudaService = String(latest.volunteer?.bahudaAllocatedService || "").trim();
       if (!latest.found) {
         setSearchResult(latest);
         setServiceMismatch(true);
@@ -287,11 +307,11 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
         setMessage("This is not your assigned service, select your assigned service.");
         return;
       }
-      if (!latest.allocated || actualService !== selected) {
+      if ((!latest.allocated || actualService !== selected) && (!bahudaService || bahudaService !== selected)) {
         setSearchResult(latest);
         setServiceMismatch(true);
         setTshirtChecked(false);
-        setLookupStage(latest.allocated ? "serviceMismatch" : "needsService");
+        setLookupStage((latest.allocated || bahudaService) ? "serviceMismatch" : "needsService");
         setMessage("This is not your assigned service, select your assigned service.");
         return;
       }
@@ -456,6 +476,9 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                     <h2>Your Allocated Service</h2>
                     <div className="service-grid service-grid-single lookup-service-grid">
                       <div><span>Your Allocated Service</span><strong>{actualOrChosenService || "-"}</strong></div>
+                      {bahudaAllocatedService ? (
+                        <div><span>Your Bahuda Service</span><strong>{bahudaAllocatedService}</strong></div>
+                      ) : null}
                       <div className="coordinator-card">
                         <span>Your Service Coordinator Name</span>
                         <div className="coordinator-profile">
@@ -527,11 +550,19 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
             {searching ? (
               <div className="notice">Searching...</div>
             ) : searchResult.found ? (
-              <div className="notice">Volunteer found. Edit the fields below and save the service allocation.</div>
+              <div className="notice">
+                Volunteer found. Jagannath service stays read-only and Bahuda service can be allocated below.
+              </div>
             ) : lookupSearched && !searching ? (
               <div className="notice">Mobile number not found. Please register the volunteer using the form below.</div>
             ) : null}
             <form className="form-grid" onSubmit={submitAllocation}>
+              {searchResult.found && actualOrChosenService ? (
+                <div className="field wide">
+                  <span>Jagannath Service</span>
+                  <div className="readonly-value">{actualOrChosenService}</div>
+                </div>
+              ) : null}
               <label className="field wide">
                 <span>Name</span>
                 <input value={form.name} onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))} placeholder="Volunteer name" />
@@ -553,7 +584,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                 <input value={form.areaOfStay} onChange={(event) => setForm((current) => ({ ...current, areaOfStay: event.target.value }))} placeholder="Area of stay" />
               </label>
               <label className="field wide">
-                <span>Please Allocate Service</span>
+                <span>Please Allocate Bahuda Service</span>
                 <select value={form.service} onChange={(event) => setForm((current) => ({ ...current, service: event.target.value }))}>
                   <option value="">Select a service</option>
                   {services.map((service) => (

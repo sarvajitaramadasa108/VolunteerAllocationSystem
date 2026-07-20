@@ -45,7 +45,9 @@ function mapService(row, allocatedCount = 0) {
 
 function mapVolunteer(row, servicesByName = {}) {
   const allocatedService = String(row?.allocated_service_name || "").trim();
+  const bahudaAllocatedService = String(row?.bahuda_allocated_service_name || "").trim();
   const serviceDetails = allocatedService ? servicesByName[allocatedService] || null : null;
+  const bahudaServiceDetails = bahudaAllocatedService ? servicesByName[bahudaAllocatedService] || null : null;
   return {
     serialNo: Number(row?.serial_no || 0),
     name: String(row?.name || "").trim(),
@@ -58,9 +60,12 @@ function mapVolunteer(row, servicesByName = {}) {
     areaOfStay: String(row?.area_of_stay || "").trim(),
     allocatedService,
     allocatedServiceName: allocatedService,
+    bahudaAllocatedService,
+    bahudaAllocatedServiceName: bahudaAllocatedService,
     attendance: Boolean(row?.attendance),
     tshirt: Boolean(row?.tshirt),
-    serviceDetails: serviceDetails ? mapService(serviceDetails) : null
+    serviceDetails: serviceDetails ? mapService(serviceDetails) : null,
+    bahudaServiceDetails: bahudaServiceDetails ? mapService(bahudaServiceDetails) : null
   };
 }
 
@@ -79,6 +84,12 @@ async function findVolunteerByMobile(supabase, mobileNumber) {
   const { data, error } = await supabase.from("volunteers").select("*");
   if (error) throw error;
   return (data || []).find((row) => normalizeMobileNumber(row?.mobile_number || "") === mobileNumber) || null;
+}
+
+function getAllocationFieldName(allocationType = "") {
+  return String(allocationType || "").trim().toLowerCase() === "bahuda"
+    ? "bahuda_allocated_service_name"
+    : "allocated_service_name";
 }
 
 function getBahudaCaseTypeFromVolunteer(row) {
@@ -201,11 +212,12 @@ function volunteerMissingFields(row = {}) {
   return missing;
 }
 
-async function listServices() {
+async function listServices(payload = {}) {
   const supabase = getSupabase();
+  const allocationField = getAllocationFieldName(payload.allocationType);
   const [servicesResult, volunteersResult] = await Promise.all([
     supabase.from("volunteer_service_master").select("*").order("serial_no", { ascending: true }),
-    supabase.from("volunteers").select("allocated_service_name")
+    supabase.from("volunteers").select(allocationField)
   ]);
 
   if (servicesResult.error) throw servicesResult.error;
@@ -213,7 +225,7 @@ async function listServices() {
 
   const allocationCounts = {};
   for (const row of volunteersResult.data || []) {
-    const serviceName = String(row?.allocated_service_name || "").trim();
+    const serviceName = String(row?.[allocationField] || "").trim();
     if (!serviceName) continue;
     allocationCounts[serviceName] = (allocationCounts[serviceName] || 0) + 1;
   }
@@ -265,6 +277,7 @@ async function searchVolunteer(payload = {}) {
   return {
     found: true,
     allocated: Boolean(volunteer.allocatedService),
+    bahudaAllocated: Boolean(volunteer.bahudaAllocatedService),
     complete: missingFields.length === 0,
     missingFields,
     volunteer,
@@ -290,6 +303,7 @@ async function upsertVolunteer(payload = {}, options = {}) {
   const markAttendance = parseBool(payload.markAttendance);
   const existing = await findVolunteerByMobile(supabase, mobileNumber);
 
+  const allocationField = getAllocationFieldName(payload.allocationType || options.allocationType);
   const serviceName = String(payload.service || payload.allocatedService || payload.serviceName || "").trim();
   const serviceLookupResult = serviceName
     ? await supabase.from("volunteer_service_master").select("*").eq("service_name", serviceName).maybeSingle()
@@ -310,7 +324,12 @@ async function upsertVolunteer(payload = {}, options = {}) {
       : Number.parseInt(payload.age, 10),
     college_working: String(payload.occupation || payload.collegeWorking || existing?.college_working || "").trim(),
     area_of_stay: String(payload.areaOfStay || existing?.area_of_stay || "").trim(),
-    allocated_service_name: serviceName || String(existing?.allocated_service_name || "").trim(),
+    allocated_service_name: allocationField === "allocated_service_name"
+      ? (serviceName || String(existing?.allocated_service_name || "").trim())
+      : String(existing?.allocated_service_name || "").trim(),
+    bahuda_allocated_service_name: allocationField === "bahuda_allocated_service_name"
+      ? (serviceName || String(existing?.bahuda_allocated_service_name || "").trim())
+      : String(existing?.bahuda_allocated_service_name || "").trim(),
     attendance: markAttendance ? true : Boolean(existing?.attendance),
     tshirt: parseBool(payload.tshirt || payload.tShirt) ? true : Boolean(existing?.tshirt)
   };
@@ -319,23 +338,26 @@ async function upsertVolunteer(payload = {}, options = {}) {
     throw new Error("Age must be a number");
   }
 
-  const eventPayload = {
-    source_row_no: 0,
-    mobile_number: merged.mobile_number,
-    name: merged.name,
-    gender: merged.gender,
-    age: merged.age,
-    college_working: merged.college_working,
-    area_of_stay: merged.area_of_stay,
-    allocated_service_name: merged.allocated_service_name || null,
-    attendance: merged.attendance,
-    tshirt: merged.tshirt,
-    event_name: "Jagannatha Bahuda Ratha Yatra 2026",
-    source: options.source || "web_form"
-  };
+  if (options.source !== "allocation_desk") {
+    const eventPayload = {
+      source_row_no: 0,
+      mobile_number: merged.mobile_number,
+      name: merged.name,
+      gender: merged.gender,
+      age: merged.age,
+      college_working: merged.college_working,
+      area_of_stay: merged.area_of_stay,
+      allocated_service_name: merged.allocated_service_name || null,
+      bahuda_allocated_service_name: merged.bahuda_allocated_service_name || null,
+      attendance: merged.attendance,
+      tshirt: merged.tshirt,
+      event_name: "Jagannatha Bahuda Ratha Yatra 2026",
+      source: options.source || "web_form"
+    };
 
-  const { error: eventError } = await supabase.from("volunteer_registration_events").insert(eventPayload);
-  if (eventError) throw eventError;
+    const { error: eventError } = await supabase.from("volunteer_registration_events").insert(eventPayload);
+    if (eventError) throw eventError;
+  }
 
   const volunteerResult = existing
     ? await supabase.from("volunteers").update(merged).eq(volunteerMatchClause(existing).column, volunteerMatchClause(existing).value).select("*").single()
@@ -359,7 +381,7 @@ async function upsertVolunteer(payload = {}, options = {}) {
 }
 
 async function allocateVolunteer(payload = {}) {
-  const result = await upsertVolunteer(payload, { source: "allocation_desk" });
+  const result = await upsertVolunteer({ ...payload, allocationType: "bahuda" }, { source: "allocation_desk", allocationType: "bahuda" });
   return result;
 }
 
@@ -452,6 +474,7 @@ async function bahudaRegistrationLookup(payload = {}) {
       occupation: String(data.college_working || "").trim(),
       areaOfStay: String(data.area_of_stay || "").trim(),
       allocatedServiceName: String(data.allocated_service_name || "").trim(),
+      bahudaAllocatedServiceName: String(data.bahuda_allocated_service_name || "").trim(),
       attendance: Boolean(data.attendance),
       tshirt: Boolean(data.tshirt)
     }
@@ -504,6 +527,7 @@ async function bahudaRegistrationUpsert(payload = {}) {
     college_working: String(payload.collegeWorking || payload.occupation || existing?.college_working || "").trim(),
     area_of_stay: String(payload.areaOfStay || existing?.area_of_stay || "").trim(),
     allocated_service_name: String(existing?.allocated_service_name || "").trim(),
+    bahuda_allocated_service_name: String(existing?.bahuda_allocated_service_name || "").trim(),
     attendance: Boolean(existing?.attendance),
     tshirt: Boolean(existing?.tshirt)
   };
@@ -521,6 +545,7 @@ async function bahudaRegistrationUpsert(payload = {}) {
     college_working: merged.college_working,
     area_of_stay: merged.area_of_stay,
     allocated_service_name: merged.allocated_service_name || null,
+    bahuda_allocated_service_name: merged.bahuda_allocated_service_name || null,
     attendance: merged.attendance,
     tshirt: merged.tshirt
   };
@@ -559,6 +584,7 @@ async function bahudaRegistrationUpsert(payload = {}) {
     occupation: volunteerResult.data.college_working,
     areaOfStay: volunteerResult.data.area_of_stay,
     allocatedServiceName: String(volunteerResult.data.allocated_service_name || "").trim(),
+    bahudaAllocatedServiceName: String(volunteerResult.data.bahuda_allocated_service_name || "").trim(),
     attendance: Boolean(volunteerResult.data.attendance),
     tshirt: Boolean(volunteerResult.data.tshirt)
   };
@@ -650,7 +676,7 @@ async function handler(request) {
   try {
     switch (action) {
       case "services.list":
-        return Response.json({ ok: true, data: await listServices() });
+        return Response.json({ ok: true, data: await listServices(payload) });
       case "volunteers.search":
         return Response.json({ ok: true, data: await searchVolunteer(payload) });
       case "volunteers.upsert":
