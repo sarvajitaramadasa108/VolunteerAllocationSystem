@@ -4,6 +4,8 @@ const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
 const BAHUDA_EVENT_KEY = "BAHUDA_RATHAYATRA_2026";
 const BAHUDA_EVENT_NAME = "Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra";
+const DEFAULT_FESTIVAL_KEY = BAHUDA_EVENT_KEY;
+const DEFAULT_FESTIVAL_NAME = "Jagannatha Bahuda Ratha Yatra";
 
 function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -78,6 +80,333 @@ function buildServiceMap(rows) {
     }
   }
   return map;
+}
+
+function mapFestival(row) {
+  return {
+    id: row?.id || null,
+    serialNo: Number(row?.serial_no || 0),
+    festivalKey: String(row?.festival_key || "").trim(),
+    festivalName: String(row?.festival_name || "").trim(),
+    festivalDateText: String(row?.festival_date_text || "").trim(),
+    locationText: String(row?.location_text || "").trim(),
+    active: Boolean(row?.active),
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null
+  };
+}
+
+function mapFestivalService(row) {
+  return {
+    id: row?.id || null,
+    serialNo: Number(row?.serial_no || 0),
+    festivalKey: String(row?.festival_key || "").trim(),
+    serviceName: String(row?.service_name || "").trim(),
+    coordinatorName: String(row?.coordinator_name || "").trim(),
+    coordinatorContactNumber: String(row?.coordinator_contact_number || "").trim(),
+    coordinatorPhotoLink: String(row?.coordinator_photo_link || "").trim(),
+    volunteersRequired: Number(row?.volunteers_required || 0),
+    active: Boolean(row?.active),
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null
+  };
+}
+
+function mapFestivalAllocation(row) {
+  return {
+    id: row?.id || null,
+    serialNo: Number(row?.serial_no || 0),
+    festivalKey: String(row?.festival_key || "").trim(),
+    mobileNumber: String(row?.mobile_number || "").trim(),
+    serviceName: String(row?.service_name || "").trim(),
+    allocationType: String(row?.allocation_type || "").trim(),
+    attendance: Boolean(row?.attendance),
+    tshirt: Boolean(row?.tshirt),
+    createdAt: row?.created_at || null,
+    updatedAt: row?.updated_at || null
+  };
+}
+
+function mapFestivalServiceAsLegacy(row) {
+  return {
+    id: row?.id || null,
+    serial_no: Number(row?.serial_no || 0),
+    service_name: String(row?.service_name || "").trim(),
+    coordinator_name: String(row?.coordinator_name || "").trim(),
+    coordinator_contact_number: String(row?.coordinator_contact_number || "").trim(),
+    coordinator_photo_link: String(row?.coordinator_photo_link || "").trim(),
+    volunteers_required: Number(row?.volunteers_required || 0),
+    active: Boolean(row?.active ?? true),
+    reporting_time: "",
+    created_at: row?.created_at || null,
+    updated_at: row?.updated_at || null
+  };
+}
+
+function buildFestivalKey(name = "", dateText = "") {
+  const base = `${String(name || "").trim()} ${String(dateText || "").trim()}`.trim();
+  const normalized = base
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_+|_+$/g, "");
+  return normalized ? normalized.slice(0, 64) : DEFAULT_FESTIVAL_KEY;
+}
+
+async function loadServiceCatalog(supabase, festivalKey = null) {
+  const activeFestival = festivalKey ? { festivalKey } : await getActiveFestival(supabase);
+  const activeFestivalKey = String(activeFestival?.festivalKey || DEFAULT_FESTIVAL_KEY).trim() || DEFAULT_FESTIVAL_KEY;
+
+  const festivalResult = await supabase
+    .from("festival_service_master")
+    .select("*")
+    .eq("festival_key", activeFestivalKey)
+    .order("serial_no", { ascending: true });
+
+  if (festivalResult.error && !String(festivalResult.error.message || "").includes("festival_service_master")) {
+    throw festivalResult.error;
+  }
+
+  if ((festivalResult.data || []).length) {
+    return {
+      festivalKey: activeFestivalKey,
+      source: "festival",
+      rows: (festivalResult.data || []).map(mapFestivalServiceAsLegacy)
+    };
+  }
+
+  const legacyResult = await supabase
+    .from("volunteer_service_master")
+    .select("*")
+    .order("serial_no", { ascending: true });
+  if (legacyResult.error) throw legacyResult.error;
+
+  return {
+    festivalKey: activeFestivalKey,
+    source: "legacy",
+    rows: (legacyResult.data || []).map((row) => ({
+      id: row?.id || null,
+      serial_no: Number(row?.serial_no || 0),
+      service_name: String(row?.service_name || "").trim(),
+      coordinator_name: String(row?.coordinator_name || "").trim(),
+      coordinator_contact_number: String(row?.coordinator_contact_number || "").trim(),
+      coordinator_photo_link: String(row?.coordinator_photo_link || "").trim(),
+      volunteers_required: Number(row?.volunteers_required || 0),
+      active: Boolean(row?.active ?? true),
+      reporting_time: String(row?.reporting_time || "").trim(),
+      created_at: row?.created_at || null,
+      updated_at: row?.updated_at || null
+    }))
+  };
+}
+
+async function getActiveFestival(supabase) {
+  const { data, error } = await supabase
+    .from("festival_master")
+    .select("*")
+    .eq("active", true)
+    .order("serial_no", { ascending: true })
+    .limit(1);
+  if (error) throw error;
+  if (data && data[0]) return mapFestival(data[0]);
+  return {
+    festivalKey: DEFAULT_FESTIVAL_KEY,
+    festivalName: DEFAULT_FESTIVAL_NAME,
+    festivalDateText: "",
+    locationText: "",
+    active: true
+  };
+}
+
+async function listFestivalMasters() {
+  const supabase = getSupabase();
+  const { data, error } = await supabase.from("festival_master").select("*").order("serial_no", { ascending: true });
+  if (error) throw error;
+  return (data || []).map(mapFestival);
+}
+
+async function nextFestivalSerialNo(supabase, tableName = "festival_master") {
+  return nextSerialNo(tableName, "serial_no");
+}
+
+async function upsertFestivalMaster(payload = {}) {
+  const supabase = getSupabase();
+  const festivalName = String(payload.festivalName || payload.festival_name || "").trim();
+  const festivalDateText = String(payload.festivalDateText || payload.festival_date_text || "").trim();
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim() || buildFestivalKey(festivalName, festivalDateText);
+  if (!festivalKey || !festivalName) {
+    throw new Error("Festival name is required");
+  }
+
+  const existingResult = await supabase.from("festival_master").select("*").eq("festival_key", festivalKey).maybeSingle();
+  if (existingResult.error) throw existingResult.error;
+  const existing = existingResult.data;
+  const row = {
+    serial_no: existing ? Number(existing.serial_no || 0) : await nextFestivalSerialNo(supabase),
+    festival_key: festivalKey,
+    festival_name: festivalName,
+    festival_date_text: festivalDateText,
+    location_text: String(payload.locationText || payload.location_text || "").trim(),
+    active: parseBool(payload.active)
+  };
+
+  const result = existing
+    ? await supabase.from("festival_master").update(row).eq("festival_key", festivalKey).select("*").single()
+    : await supabase.from("festival_master").insert(row).select("*").single();
+  if (result.error) throw result.error;
+
+  if (row.active) {
+    await supabase.from("festival_master").update({ active: false }).neq("festival_key", festivalKey);
+  }
+
+  return mapFestival(result.data);
+}
+
+async function setActiveFestival(payload = {}) {
+  const supabase = getSupabase();
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim();
+  if (!festivalKey) throw new Error("Select a festival");
+  const { error: deactivateError } = await supabase.from("festival_master").update({ active: false }).neq("festival_key", festivalKey);
+  if (deactivateError) throw deactivateError;
+  const { error } = await supabase.from("festival_master").update({ active: true }).eq("festival_key", festivalKey);
+  if (error) throw error;
+  return { festivalKey, active: true };
+}
+
+async function listFestivalServices(payload = {}) {
+  const supabase = getSupabase();
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim() || (await getActiveFestival(supabase)).festivalKey;
+  const catalog = await loadServiceCatalog(supabase, festivalKey);
+
+  const allocationCounts = {};
+  if (catalog.source === "festival") {
+    const allocationsResult = await supabase
+      .from("volunteer_festival_allocations")
+      .select("service_name")
+      .eq("festival_key", festivalKey);
+    if (!allocationsResult.error) {
+      for (const row of allocationsResult.data || []) {
+        const serviceName = String(row?.service_name || "").trim();
+        if (!serviceName) continue;
+        allocationCounts[serviceName] = (allocationCounts[serviceName] || 0) + 1;
+      }
+    }
+  } else {
+    const allocationField = getAllocationFieldName(payload.allocationType);
+    const volunteersResult = await supabase.from("volunteers").select("*");
+    if (volunteersResult.error) throw volunteersResult.error;
+    for (const row of volunteersResult.data || []) {
+      const serviceName = String(row?.[allocationField] || row?.allocated_service_name || "").trim();
+      if (!serviceName) continue;
+      allocationCounts[serviceName] = (allocationCounts[serviceName] || 0) + 1;
+    }
+  }
+
+  return (catalog.rows || [])
+    .filter((row) => Boolean(row?.active ?? true))
+    .map((row) => ({
+      ...mapService(row, allocationCounts[String(row?.service_name || "").trim()] || 0),
+      festivalKey: catalog.festivalKey,
+      active: Boolean(row?.active ?? true)
+    }));
+}
+
+async function upsertFestivalService(payload = {}) {
+  const supabase = getSupabase();
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim() || (await getActiveFestival(supabase)).festivalKey;
+  const serviceName = String(payload.serviceName || payload.service_name || "").trim();
+  if (!festivalKey || !serviceName) {
+    throw new Error("Festival and service name are required");
+  }
+
+  const existingResult = await supabase
+    .from("festival_service_master")
+    .select("*")
+    .eq("festival_key", festivalKey)
+    .eq("service_name", serviceName)
+    .maybeSingle();
+  if (existingResult.error) throw existingResult.error;
+  const existing = existingResult.data;
+  const row = {
+    serial_no: existing ? Number(existing.serial_no || 0) : await nextSerialNo("festival_service_master", "serial_no"),
+    festival_key: festivalKey,
+    service_name: serviceName,
+    coordinator_name: String(payload.coordinatorName || payload.coordinator_name || "").trim(),
+    coordinator_contact_number: String(payload.coordinatorContactNumber || payload.coordinator_contact_number || "").trim(),
+    coordinator_photo_link: String(payload.coordinatorPhotoLink || payload.coordinator_photo_link || "").trim(),
+    volunteers_required: Number.parseInt(payload.volunteersRequired ?? payload.volunteers_required ?? 0, 10) || 0,
+    active: payload.active === undefined ? true : parseBool(payload.active)
+  };
+
+  const result = existing
+    ? await supabase
+        .from("festival_service_master")
+        .update(row)
+        .eq("festival_key", festivalKey)
+        .eq("service_name", serviceName)
+        .select("*")
+        .single()
+    : await supabase.from("festival_service_master").insert(row).select("*").single();
+  if (result.error) throw result.error;
+  return mapFestivalService(result.data);
+}
+
+async function deleteFestivalService(payload = {}) {
+  const supabase = getSupabase();
+  const id = String(payload.id || "").trim();
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim() || (await getActiveFestival(supabase)).festivalKey;
+  const serviceName = String(payload.serviceName || payload.service_name || "").trim();
+  if (!id && (!festivalKey || !serviceName)) {
+    throw new Error("Select a service to delete");
+  }
+
+  let query = supabase.from("festival_service_master").delete();
+  if (id) {
+    query = query.eq("id", id);
+  } else {
+    query = query.eq("festival_key", festivalKey).eq("service_name", serviceName);
+  }
+  const { error } = await query;
+  if (error) throw error;
+  return { deleted: true };
+}
+
+async function upsertFestivalAllocation(supabase, payload = {}) {
+  const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim();
+  const mobileNumber = normalizeMobileNumber(payload.mobile || payload.mobileNumber || "");
+  if (!festivalKey || !mobileNumber) return null;
+  const row = {
+    serial_no: await nextSerialNo("volunteer_festival_allocations", "serial_no"),
+    festival_key: festivalKey,
+    mobile_number: mobileNumber,
+    service_name: String(payload.serviceName || payload.service || "").trim() || null,
+    allocation_type: String(payload.allocationType || "").trim() || null,
+    attendance: Boolean(payload.attendance),
+    tshirt: Boolean(payload.tshirt)
+  };
+  const existing = await supabase
+    .from("volunteer_festival_allocations")
+    .select("*")
+    .eq("festival_key", festivalKey)
+    .eq("mobile_number", mobileNumber)
+    .maybeSingle();
+  if (existing.error) throw existing.error;
+  const result = existing.data
+    ? await supabase.from("volunteer_festival_allocations").update(row).eq("festival_key", festivalKey).eq("mobile_number", mobileNumber).select("*").single()
+    : await supabase.from("volunteer_festival_allocations").insert(row).select("*").single();
+  if (result.error) throw result.error;
+  return mapFestivalAllocation(result.data);
+}
+
+async function getFestivalAllocation(supabase, festivalKey, mobileNumber) {
+  const { data, error } = await supabase
+    .from("volunteer_festival_allocations")
+    .select("*")
+    .eq("festival_key", festivalKey)
+    .eq("mobile_number", mobileNumber)
+    .maybeSingle();
+  if (error && String(error.message || "").includes("volunteer_festival_allocations")) return null;
+  if (error) throw error;
+  return data ? mapFestivalAllocation(data) : null;
 }
 
 async function findVolunteerByMobile(supabase, mobileNumber) {
@@ -215,17 +544,55 @@ function volunteerMissingFields(row = {}) {
 async function listServices(payload = {}) {
   const supabase = getSupabase();
   const allocationField = getAllocationFieldName(payload.allocationType);
+  try {
+    const festivalKey = String(payload.festivalKey || payload.festival_key || "").trim() || (await getActiveFestival(supabase)).festivalKey;
+    const [servicesResult, allocationsResult] = await Promise.all([
+      supabase.from("festival_service_master").select("*").eq("festival_key", festivalKey).order("serial_no", { ascending: true }),
+      supabase.from("volunteer_festival_allocations").select("service_name").eq("festival_key", festivalKey)
+    ]);
+
+    if (servicesResult.error) throw servicesResult.error;
+
+    const allocationCounts = {};
+    if (!allocationsResult.error) {
+      for (const row of allocationsResult.data || []) {
+        const serviceName = String(row?.service_name || "").trim();
+        if (!serviceName) continue;
+        allocationCounts[serviceName] = (allocationCounts[serviceName] || 0) + 1;
+      }
+    }
+
+    const mapped = (servicesResult.data || [])
+      .filter((row) => Boolean(row?.active ?? true))
+      .map((row) => ({
+        ...mapService({
+          service_name: row.service_name,
+          coordinator_name: row.coordinator_name,
+          coordinator_contact_number: row.coordinator_contact_number,
+          reporting_time: "",
+          volunteers_required: row.volunteers_required,
+          coordinator_photo_link: row.coordinator_photo_link
+        }, allocationCounts[String(row?.service_name || "").trim()] || 0),
+        festivalKey,
+        active: Boolean(row?.active ?? true)
+      }));
+    if (mapped.length) return mapped;
+  } catch (error) {
+    if (!String(error?.message || "").includes("festival_service_master")) {
+      throw error;
+    }
+  }
+
   const [servicesResult, volunteersResult] = await Promise.all([
     supabase.from("volunteer_service_master").select("*").order("serial_no", { ascending: true }),
     supabase.from("volunteers").select("*")
   ]);
-
   if (servicesResult.error) throw servicesResult.error;
   if (volunteersResult.error) throw volunteersResult.error;
 
   const allocationCounts = {};
   for (const row of volunteersResult.data || []) {
-    const serviceName = String(row?.[allocationField] || "").trim();
+    const serviceName = String(row?.[allocationField] || row?.allocated_service_name || "").trim();
     if (!serviceName) continue;
     allocationCounts[serviceName] = (allocationCounts[serviceName] || 0) + 1;
   }
@@ -243,14 +610,12 @@ async function searchVolunteer(payload = {}) {
   }
 
   const markAttendance = parseBool(payload.markAttendance);
-  const [servicesResult, volunteerRow] = await Promise.all([
-    supabase.from("volunteer_service_master").select("*"),
+  const [serviceCatalog, volunteerRow] = await Promise.all([
+    loadServiceCatalog(supabase, payload.festivalKey || payload.festival_key || ""),
     findVolunteerByMobile(supabase, mobileNumber)
   ]);
 
-  if (servicesResult.error) throw servicesResult.error;
-
-  const servicesByName = buildServiceMap(servicesResult.data || []);
+  const servicesByName = buildServiceMap(serviceCatalog.rows || []);
   if (!volunteerRow) {
     return {
       found: false,
@@ -281,7 +646,8 @@ async function searchVolunteer(payload = {}) {
     complete: missingFields.length === 0,
     missingFields,
     volunteer,
-    serviceDetails: volunteer.serviceDetails
+    serviceDetails: volunteer.serviceDetails,
+    serviceCatalogFestivalKey: serviceCatalog.festivalKey
   };
 }
 
@@ -305,11 +671,9 @@ async function upsertVolunteer(payload = {}, options = {}) {
 
   const allocationField = getAllocationFieldName(payload.allocationType || options.allocationType);
   const serviceName = String(payload.service || payload.allocatedService || payload.serviceName || "").trim();
-  const serviceLookupResult = serviceName
-    ? await supabase.from("volunteer_service_master").select("*").eq("service_name", serviceName).maybeSingle()
-    : { data: null, error: null };
-  if (serviceLookupResult.error) throw serviceLookupResult.error;
-  if (serviceName && !serviceLookupResult.data) {
+  const serviceCatalog = await loadServiceCatalog(supabase, payload.festivalKey || payload.festival_key || "");
+  const servicesByName = buildServiceMap(serviceCatalog.rows || []);
+  if (serviceName && !servicesByName[serviceName]) {
     throw new Error("Select a valid service");
   }
 
@@ -365,9 +729,6 @@ async function upsertVolunteer(payload = {}, options = {}) {
 
   if (volunteerResult.error) throw volunteerResult.error;
 
-  const servicesResult = await supabase.from("volunteer_service_master").select("*");
-  if (servicesResult.error) throw servicesResult.error;
-  const servicesByName = buildServiceMap(servicesResult.data || []);
   const volunteer = mapVolunteer(volunteerResult.data, servicesByName);
 
   return {
@@ -381,7 +742,23 @@ async function upsertVolunteer(payload = {}, options = {}) {
 }
 
 async function allocateVolunteer(payload = {}) {
+  const supabase = getSupabase();
   const result = await upsertVolunteer({ ...payload, allocationType: "bahuda" }, { source: "allocation_desk", allocationType: "bahuda" });
+  try {
+    const activeFestival = await getActiveFestival(supabase);
+    await upsertFestivalAllocation(supabase, {
+      festivalKey: activeFestival.festivalKey,
+      mobile: payload.mobile || payload.mobileNumber || payload.whatsappNumber || "",
+      serviceName: String(payload.service || payload.allocatedService || payload.serviceName || "").trim(),
+      allocationType: "bahuda",
+      attendance: parseBool(payload.markAttendance),
+      tshirt: parseBool(payload.tshirt || payload.tShirt)
+    });
+  } catch (error) {
+    if (!String(error?.message || "").includes("volunteer_festival_allocations")) {
+      throw error;
+    }
+  }
   return result;
 }
 
@@ -401,9 +778,8 @@ async function markTshirt(payload = {}) {
   const { error } = await supabase.from("volunteers").update({ tshirt: true, attendance: true }).eq("mobile_number", mobileNumber);
   if (error) throw error;
 
-  const servicesResult = await supabase.from("volunteer_service_master").select("*");
-  if (servicesResult.error) throw servicesResult.error;
-  const servicesByName = buildServiceMap(servicesResult.data || []);
+  const serviceCatalog = await loadServiceCatalog(supabase, payload.festivalKey || payload.festival_key || "");
+  const servicesByName = buildServiceMap(serviceCatalog.rows || []);
   const volunteer = mapVolunteer({ ...existingResult.data, tshirt: true, attendance: true }, servicesByName);
   return { saved: true, volunteer };
 }
@@ -415,16 +791,14 @@ async function volunteersByService(payload = {}) {
     throw new Error("Select a service");
   }
 
-  const [volunteersResult, servicesResult] = await Promise.all([
-    supabase.from("volunteers").select("*").eq("allocated_service_name", serviceName).order("serial_no", { ascending: true }),
-    supabase.from("volunteer_service_master").select("*").eq("service_name", serviceName).maybeSingle()
-  ]);
-
+  const serviceCatalog = await loadServiceCatalog(supabase, payload.festivalKey || payload.festival_key || "");
+  const serviceMap = buildServiceMap(serviceCatalog.rows || []);
+  const allocationField = getAllocationFieldName(payload.allocationType);
+  const volunteersResult = await supabase.from("volunteers").select("*").order("serial_no", { ascending: true });
   if (volunteersResult.error) throw volunteersResult.error;
-  if (servicesResult.error) throw servicesResult.error;
-
-  const serviceMap = buildServiceMap(servicesResult.data ? [servicesResult.data] : []);
-  return (volunteersResult.data || []).map((row) => mapVolunteer(row, serviceMap));
+  return (volunteersResult.data || [])
+    .filter((row) => String(row?.[allocationField] || row?.allocated_service_name || "").trim() === serviceName || String(row?.bahuda_allocated_service_name || "").trim() === serviceName)
+    .map((row) => mapVolunteer(row, serviceMap));
 }
 
 async function bahudaRegistrationLookup(payload = {}) {
@@ -677,6 +1051,18 @@ async function handler(request) {
     switch (action) {
       case "services.list":
         return Response.json({ ok: true, data: await listServices(payload) });
+      case "festivalMaster.list":
+        return Response.json({ ok: true, data: await listFestivalMasters(payload) });
+      case "festivalMaster.upsert":
+        return Response.json({ ok: true, data: await upsertFestivalMaster(payload) });
+      case "festivalMaster.setActive":
+        return Response.json({ ok: true, data: await setActiveFestival(payload) });
+      case "festivalService.list":
+        return Response.json({ ok: true, data: await listFestivalServices(payload) });
+      case "festivalService.upsert":
+        return Response.json({ ok: true, data: await upsertFestivalService(payload) });
+      case "festivalService.delete":
+        return Response.json({ ok: true, data: await deleteFestivalService(payload) });
       case "volunteers.search":
         return Response.json({ ok: true, data: await searchVolunteer(payload) });
       case "volunteers.upsert":
