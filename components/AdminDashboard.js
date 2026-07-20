@@ -3,6 +3,15 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 
+const emptyRegistrationSummary = {
+  totalSearches: 0,
+  totalSubmissions: 0,
+  completeLookups: 0,
+  partialLookups: 0,
+  newLookups: 0,
+  registrationsSaved: 0
+};
+
 export default function AdminDashboard() {
   const [services, setServices] = useState([]);
   const [selectedService, setSelectedService] = useState("");
@@ -10,6 +19,10 @@ export default function AdminDashboard() {
   const [working, setWorking] = useState(false);
   const [message, setMessage] = useState("");
   const [rows, setRows] = useState([]);
+  const [registrationRows, setRegistrationRows] = useState([]);
+  const [registrationSummary, setRegistrationSummary] = useState(emptyRegistrationSummary);
+  const [registrationLoading, setRegistrationLoading] = useState(true);
+  const [registrationMessage, setRegistrationMessage] = useState("");
 
   useEffect(() => {
     let alive = true;
@@ -31,35 +44,52 @@ export default function AdminDashboard() {
     };
   }, []);
 
+  useEffect(() => {
+    let alive = true;
+    let timer = null;
+
+    async function loadRegistrationActivity() {
+      try {
+        const response = await fetch("/api/bridge", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ action: "bahudaRegistrations.activity.list" })
+        });
+        const payload = await response.json();
+        if (!alive) return;
+        if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not load registration activity");
+        setRegistrationRows(Array.isArray(payload.data?.rows) ? payload.data.rows : []);
+        setRegistrationSummary(payload.data?.summary || emptyRegistrationSummary);
+      } catch (error) {
+        if (alive) {
+          setRegistrationRows([]);
+          setRegistrationSummary(emptyRegistrationSummary);
+          setRegistrationMessage(error.message || "Could not load registration activity");
+        }
+      } finally {
+        if (alive) setRegistrationLoading(false);
+      }
+    }
+
+    loadRegistrationActivity();
+    timer = window.setInterval(loadRegistrationActivity, 20000);
+    return () => {
+      alive = false;
+      if (timer) window.clearInterval(timer);
+    };
+  }, []);
+
   const selectedMeta = useMemo(
     () => services.find((service) => service.serviceName === selectedService) || null,
     [services, selectedService]
   );
 
-  async function downloadVolunteers() {
-    if (!selectedService) {
-      setMessage("Select a service first");
-      return;
-    }
-    setWorking(true);
-    setMessage("");
-    try {
-      const response = await fetch("/api/bridge", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ action: "volunteers.byService", serviceName: selectedService })
-      });
-      const payload = await response.json();
-      if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not load volunteers");
-      const list = Array.isArray(payload.data) ? payload.data : [];
-      setRows(list);
-      downloadExcel(list, selectedMeta);
-      setMessage(`Downloaded ${list.length} volunteers for ${selectedService}`);
-    } catch (error) {
-      setMessage(error.message || "Could not download volunteers");
-    } finally {
-      setWorking(false);
-    }
+  function getCaseLabel(row) {
+    if (row.stage === "submit") return "Submission";
+    if (row.caseType === "existing_complete") return "Already registered";
+    if (row.caseType === "partial_profile") return "Partial registration";
+    if (row.caseType === "new_registration") return "New registration";
+    return row.caseType || "-";
   }
 
   async function loadVolunteers() {
@@ -86,7 +116,7 @@ export default function AdminDashboard() {
     }
   }
 
-  function downloadExcel(list, serviceMeta) {
+  function downloadVolunteerExcel(list, serviceMeta) {
     const headers = [
       "S No",
       "Name",
@@ -117,9 +147,7 @@ export default function AdminDashboard() {
     `).join("");
     const html = `
       <html>
-        <head>
-          <meta charset="UTF-8" />
-        </head>
+        <head><meta charset="UTF-8" /></head>
         <body>
           <table border="1">
             <tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr>
@@ -132,6 +160,60 @@ export default function AdminDashboard() {
     const link = document.createElement("a");
     link.href = URL.createObjectURL(blob);
     link.download = `${selectedService || "service"}-volunteers.xls`;
+    link.click();
+    URL.revokeObjectURL(link.href);
+  }
+
+  function downloadRegistrationExcel() {
+    const headers = [
+      "S No",
+      "Timestamp",
+      "Mobile Number",
+      "Stage",
+      "Case",
+      "Found",
+      "Complete",
+      "Registration Saved",
+      "Missing Fields",
+      "Name",
+      "Gender",
+      "Age",
+      "College / Working",
+      "Area of Stay"
+    ];
+    const rowsHtml = registrationRows.map((row, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${escapeHtml(row.createdAt ? new Date(row.createdAt).toLocaleString() : "")}</td>
+        <td>${escapeHtml(row.mobileNumber || "")}</td>
+        <td>${escapeHtml(row.stage || "")}</td>
+        <td>${escapeHtml(getCaseLabel(row))}</td>
+        <td>${row.found ? "Yes" : "No"}</td>
+        <td>${row.complete ? "Yes" : "No"}</td>
+        <td>${row.registrationSaved ? "Yes" : "No"}</td>
+        <td>${escapeHtml((row.missingFields || []).join(", "))}</td>
+        <td>${escapeHtml(row.name || "")}</td>
+        <td>${escapeHtml(row.gender || "")}</td>
+        <td>${escapeHtml(String(row.age || ""))}</td>
+        <td>${escapeHtml(row.occupation || "")}</td>
+        <td>${escapeHtml(row.areaOfStay || "")}</td>
+      </tr>
+    `).join("");
+    const html = `
+      <html>
+        <head><meta charset="UTF-8" /></head>
+        <body>
+          <table border="1">
+            <tr>${headers.map((header) => `<th>${header}</th>`).join("")}</tr>
+            ${rowsHtml}
+          </table>
+        </body>
+      </html>
+    `;
+    const blob = new Blob([html], { type: "application/vnd.ms-excel" });
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "bahuda-registration-activity.xls";
     link.click();
     URL.revokeObjectURL(link.href);
   }
@@ -153,11 +235,14 @@ export default function AdminDashboard() {
         <div className="form-grid">
           <label className="field wide">
             <span>Service</span>
-            <select value={selectedService} onChange={(event) => {
-              setSelectedService(event.target.value);
-              setRows([]);
-              setMessage("");
-            }}>
+            <select
+              value={selectedService}
+              onChange={(event) => {
+                setSelectedService(event.target.value);
+                setRows([]);
+                setMessage("");
+              }}
+            >
               <option value="">Select a service</option>
               {services.map((service) => (
                 <option key={service.serviceName} value={service.serviceName}>
@@ -186,7 +271,7 @@ export default function AdminDashboard() {
           <h2>Preview</h2>
           <div className="row-actions">
             {rows.length ? (
-              <button type="button" onClick={() => downloadExcel(rows, selectedMeta)} disabled={working}>
+              <button type="button" onClick={() => downloadVolunteerExcel(rows, selectedMeta)} disabled={working}>
                 Download as Excel
               </button>
             ) : null}
@@ -223,6 +308,102 @@ export default function AdminDashboard() {
           </div>
         ) : (
           <div className="empty-state">Select a service to preview the volunteers.</div>
+        )}
+      </section>
+
+      <section className="panel">
+        <div className="panel-head">
+          <div>
+            <h2>Bahuda Registration Activity</h2>
+            <p className="subtle">Live feed of lookups and submissions from the registration page.</p>
+          </div>
+          <div className="row-actions">
+            <button
+              type="button"
+              onClick={async () => {
+                setRegistrationLoading(true);
+                setRegistrationMessage("");
+                try {
+                  const response = await fetch("/api/bridge", {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ action: "bahudaRegistrations.activity.list" })
+                  });
+                  const payload = await response.json();
+                  if (!response.ok || payload.ok === false) throw new Error(payload.error || "Could not load registration activity");
+                  setRegistrationRows(Array.isArray(payload.data?.rows) ? payload.data.rows : []);
+                  setRegistrationSummary(payload.data?.summary || emptyRegistrationSummary);
+                } catch (error) {
+                  setRegistrationMessage(error.message || "Could not load registration activity");
+                } finally {
+                  setRegistrationLoading(false);
+                }
+              }}
+              disabled={registrationLoading}
+            >
+              {registrationLoading ? "Loading..." : "Refresh"}
+            </button>
+            {registrationRows.length ? (
+              <button type="button" onClick={downloadRegistrationExcel} disabled={registrationLoading}>
+                Download Excel
+              </button>
+            ) : null}
+          </div>
+        </div>
+
+        <div className="metric-note" style={{ marginBottom: 12 }}>
+          Searches: {registrationSummary.totalSearches} | Submissions: {registrationSummary.totalSubmissions} | Existing: {registrationSummary.completeLookups} | Partial: {registrationSummary.partialLookups} | New: {registrationSummary.newLookups}
+        </div>
+
+        {registrationMessage ? <section className="notice">{registrationMessage}</section> : null}
+
+        {registrationRows.length ? (
+          <div className="table-wrap">
+            <table className="summary-table">
+              <thead>
+                <tr>
+                  <th>S No</th>
+                  <th>Time</th>
+                  <th>Mobile</th>
+                  <th>Stage</th>
+                  <th>Case</th>
+                  <th>Found</th>
+                  <th>Complete</th>
+                  <th>Saved</th>
+                  <th>Missing Fields</th>
+                  <th>Name</th>
+                  <th>Gender</th>
+                  <th>Age</th>
+                  <th>College / Working</th>
+                  <th>Area of Stay</th>
+                </tr>
+              </thead>
+              <tbody>
+                {registrationRows.map((row, index) => (
+                  <tr key={`${row.mobileNumber}-${row.stage}-${row.createdAt}-${index}`}>
+                    <td>{index + 1}</td>
+                    <td>{row.createdAt ? new Date(row.createdAt).toLocaleString() : "-"}</td>
+                    <td>{row.mobileNumber || "-"}</td>
+                    <td>{row.stage || "-"}</td>
+                    <td>{getCaseLabel(row)}</td>
+                    <td>{row.found ? "Yes" : "No"}</td>
+                    <td>{row.complete ? "Yes" : "No"}</td>
+                    <td>{row.registrationSaved ? "Yes" : "No"}</td>
+                    <td>{(row.missingFields || []).join(", ") || "-"}</td>
+                    <td>{row.name || "-"}</td>
+                    <td>{row.gender || "-"}</td>
+                    <td>{row.age || "-"}</td>
+                    <td>{row.occupation || "-"}</td>
+                    <td>{row.areaOfStay || "-"}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="empty-state">
+            {registrationLoading ? "Loading registration activity..." : "No registration activity captured yet."}
+          </div>
         )}
       </section>
     </main>

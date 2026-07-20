@@ -178,6 +178,7 @@ export default function VolunteerRegistrationForm() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           action: "bahudaRegistrations.upsert",
+          caseType: lookup.found ? (lookup.complete ? "existing_complete" : "partial_profile") : "new_registration",
           ...payload
         })
       });

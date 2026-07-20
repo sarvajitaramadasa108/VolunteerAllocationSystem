@@ -2,6 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 
 const SUPABASE_URL = process.env.SUPABASE_URL || "";
 const SUPABASE_SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY || "";
+const BAHUDA_EVENT_KEY = "BAHUDA_RATHAYATRA_2026";
+const BAHUDA_EVENT_NAME = "Volunteer Service Registrations for Sri Jagannath Bahuda Rathayatra";
 
 function getSupabase() {
   if (!SUPABASE_URL || !SUPABASE_SERVICE_ROLE_KEY) {
@@ -77,6 +79,48 @@ async function findVolunteerByMobile(supabase, mobileNumber) {
   const { data, error } = await supabase.from("volunteers").select("*");
   if (error) throw error;
   return (data || []).find((row) => normalizeMobileNumber(row?.mobile_number || "") === mobileNumber) || null;
+}
+
+function getBahudaCaseTypeFromVolunteer(row) {
+  if (!row) return "new_registration";
+  return volunteerMissingFields(row).length === 0 ? "existing_complete" : "partial_profile";
+}
+
+async function recordRegistrationActivity(supabase, payload = {}) {
+  const mobileNumber = normalizeMobileNumber(payload.mobile || payload.mobileNumber || "");
+  if (!mobileNumber) return null;
+
+  try {
+    const serialNo = await nextSerialNo("volunteer_registration_activity_logs", "serial_no");
+    const row = {
+      serial_no: serialNo,
+      event_key: payload.eventKey || BAHUDA_EVENT_KEY,
+      event_name: payload.eventName || BAHUDA_EVENT_NAME,
+      mobile_number: mobileNumber,
+      stage: String(payload.stage || "lookup").trim(),
+      case_type: String(payload.caseType || "new_registration").trim(),
+      found: Boolean(payload.found),
+      complete: Boolean(payload.complete),
+      registration_saved: Boolean(payload.registrationSaved),
+      missing_fields: Array.isArray(payload.missingFields) ? payload.missingFields : [],
+      name: String(payload.name || "").trim() || null,
+      gender: String(payload.gender || "").trim() || null,
+      age: payload.age === null || payload.age === undefined || payload.age === "" ? null : Number.parseInt(payload.age, 10),
+      college_working: String(payload.collegeWorking || payload.occupation || "").trim() || null,
+      area_of_stay: String(payload.areaOfStay || "").trim() || null
+    };
+
+    if (row.age !== null && Number.isNaN(row.age)) {
+      row.age = null;
+    }
+
+    const { error } = await supabase.from("volunteer_registration_activity_logs").insert(row);
+    if (error && error.code !== "42P01") throw error;
+    return row;
+  } catch (error) {
+    if (error?.code === "42P01") return null;
+    throw error;
+  }
 }
 
 function volunteerMatchClause(row) {
@@ -315,16 +359,26 @@ async function bahudaRegistrationLookup(payload = {}) {
   if (error) throw error;
 
   if (!data) {
-    return {
+    const response = {
       found: false,
       complete: false,
       missingFields: ["name", "gender", "age", "occupation", "areaOfStay"],
       registration: null
     };
+    await recordRegistrationActivity(supabase, {
+      mobileNumber,
+      stage: "lookup",
+      caseType: "new_registration",
+      found: false,
+      complete: false,
+      registrationSaved: false,
+      missingFields: response.missingFields
+    });
+    return response;
   }
 
   const missingFields = volunteerMissingFields(data);
-  return {
+  const response = {
     found: true,
     complete: missingFields.length === 0,
     missingFields,
@@ -341,6 +395,21 @@ async function bahudaRegistrationLookup(payload = {}) {
       tshirt: Boolean(data.tshirt)
     }
   };
+  await recordRegistrationActivity(supabase, {
+    mobileNumber,
+    stage: "lookup",
+    caseType: getBahudaCaseTypeFromVolunteer(data),
+    found: true,
+    complete: response.complete,
+    registrationSaved: false,
+    missingFields: missingFields,
+    name: data.name,
+    gender: data.gender,
+    age: data.age,
+    collegeWorking: data.college_working,
+    areaOfStay: data.area_of_stay
+  });
+  return response;
 }
 
 async function nextEventRegistrationSerialNo(supabase) {
@@ -432,12 +501,70 @@ async function bahudaRegistrationUpsert(payload = {}) {
     attendance: Boolean(volunteerResult.data.attendance),
     tshirt: Boolean(volunteerResult.data.tshirt)
   };
+
+  await recordRegistrationActivity(supabase, {
+    mobileNumber,
+    stage: "submit",
+    caseType: String(payload.caseType || getBahudaCaseTypeFromVolunteer(existing || volunteerResult.data)).trim(),
+    found: true,
+    complete: volunteerMissingFields(volunteerResult.data).length === 0,
+    registrationSaved: true,
+    missingFields: volunteerMissingFields(volunteerResult.data),
+    name: volunteerResult.data.name,
+    gender: volunteerResult.data.gender,
+    age: volunteerResult.data.age,
+    collegeWorking: volunteerResult.data.college_working,
+    areaOfStay: volunteerResult.data.area_of_stay
+  });
+
   return {
     saved: true,
     registration,
     complete: volunteerMissingFields(volunteerResult.data).length === 0,
     missingFields: volunteerMissingFields(volunteerResult.data)
   };
+}
+
+async function listRegistrationActivities(payload = {}) {
+  const supabase = getSupabase();
+  const eventKey = String(payload.eventKey || BAHUDA_EVENT_KEY).trim();
+  const { data, error } = await supabase
+    .from("volunteer_registration_activity_logs")
+    .select("*")
+    .eq("event_key", eventKey)
+    .order("created_at", { ascending: false });
+  if (error) throw error;
+
+  const rows = (data || []).map((row) => ({
+    serialNo: Number(row.serial_no || 0),
+    eventKey: String(row.event_key || "").trim(),
+    eventName: String(row.event_name || "").trim(),
+    mobileNumber: String(row.mobile_number || "").trim(),
+    stage: String(row.stage || "").trim(),
+    caseType: String(row.case_type || "").trim(),
+    found: Boolean(row.found),
+    complete: Boolean(row.complete),
+    registrationSaved: Boolean(row.registration_saved),
+    missingFields: Array.isArray(row.missing_fields) ? row.missing_fields : [],
+    name: String(row.name || "").trim(),
+    gender: String(row.gender || "").trim(),
+    age: row.age === null || row.age === undefined ? "" : Number(row.age),
+    occupation: String(row.college_working || "").trim(),
+    areaOfStay: String(row.area_of_stay || "").trim(),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  }));
+
+  const summary = {
+    totalSearches: rows.filter((row) => row.stage === "lookup").length,
+    totalSubmissions: rows.filter((row) => row.stage === "submit").length,
+    completeLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "existing_complete").length,
+    partialLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "partial_profile").length,
+    newLookups: rows.filter((row) => row.stage === "lookup" && row.caseType === "new_registration").length,
+    registrationsSaved: rows.filter((row) => row.stage === "submit" && row.registrationSaved).length
+  };
+
+  return { rows, summary };
 }
 
 async function handler(request) {
@@ -470,11 +597,17 @@ async function handler(request) {
         return Response.json({ ok: true, data: await bahudaRegistrationLookup(payload) });
       case "bahudaRegistrations.upsert":
         return Response.json({ ok: true, data: await bahudaRegistrationUpsert(payload) });
+      case "bahudaRegistrations.activity.list":
+        return Response.json({ ok: true, data: await listRegistrationActivities(payload) });
       default:
         return Response.json({ ok: false, error: `Unknown action: ${action}` }, { status: 400 });
     }
   } catch (error) {
-    if (error?.code === "42P01" || String(error?.message || "").includes("volunteer_event_registrations")) {
+    if (
+      error?.code === "42P01" ||
+      String(error?.message || "").includes("volunteer_event_registrations") ||
+      String(error?.message || "").includes("volunteer_registration_activity_logs")
+    ) {
       return Response.json({
         ok: false,
         error: "Bahuda registration schema is not applied yet. Please run supabase/bahuda_registration_schema.sql in Supabase."

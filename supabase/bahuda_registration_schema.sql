@@ -59,3 +59,51 @@ on public.volunteer_event_registrations
 for all
 using (true)
 with check (true);
+
+create table if not exists public.volunteer_registration_activity_logs (
+  id uuid primary key default gen_random_uuid(),
+  serial_no integer not null,
+  event_key text not null,
+  event_name text not null,
+  mobile_number text not null,
+  stage text not null,
+  case_type text not null,
+  found boolean not null default false,
+  complete boolean not null default false,
+  registration_saved boolean not null default false,
+  missing_fields jsonb not null default '[]'::jsonb,
+  name text,
+  gender text,
+  age integer,
+  college_working text,
+  area_of_stay text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+alter table public.volunteer_registration_activity_logs
+  add column if not exists missing_fields jsonb not null default '[]'::jsonb,
+  add column if not exists name text,
+  add column if not exists gender text,
+  add column if not exists age integer,
+  add column if not exists college_working text,
+  add column if not exists area_of_stay text;
+
+create index if not exists idx_volunteer_registration_activity_logs_event_created
+  on public.volunteer_registration_activity_logs (event_key, created_at desc);
+create index if not exists idx_volunteer_registration_activity_logs_event_mobile
+  on public.volunteer_registration_activity_logs (event_key, mobile_number);
+
+drop trigger if exists trg_volunteer_registration_activity_logs_updated_at on public.volunteer_registration_activity_logs;
+create trigger trg_volunteer_registration_activity_logs_updated_at
+before update on public.volunteer_registration_activity_logs
+for each row execute function public.set_updated_at();
+
+alter table public.volunteer_registration_activity_logs enable row level security;
+
+drop policy if exists "volunteer_registration_activity_logs_all_access" on public.volunteer_registration_activity_logs;
+create policy "volunteer_registration_activity_logs_all_access"
+on public.volunteer_registration_activity_logs
+for all
+using (true)
+with check (true);
