@@ -276,7 +276,7 @@ async function searchVolunteer(payload = {}) {
   const missingFields = volunteerMissingFields(volunteerRow);
   return {
     found: true,
-    allocated: Boolean(volunteer.allocatedService),
+    allocated: Boolean(volunteer.allocatedService || volunteer.bahudaAllocatedService),
     bahudaAllocated: Boolean(volunteer.bahudaAllocatedService),
     complete: missingFields.length === 0,
     missingFields,

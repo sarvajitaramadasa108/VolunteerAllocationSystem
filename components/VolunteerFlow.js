@@ -49,6 +49,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   const [lookupSearched, setLookupSearched] = useState(false);
   const [lookupStage, setLookupStage] = useState("idle");
   const [lookupServiceSelection, setLookupServiceSelection] = useState("");
+  const [lookupContinueWithJagannath, setLookupContinueWithJagannath] = useState(false);
   const [serviceMismatch, setServiceMismatch] = useState(false);
   const [tshirtChecked, setTshirtChecked] = useState(false);
   const [form, setForm] = useState({
@@ -68,6 +69,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
   );
   const actualOrChosenService = searchResult.volunteer?.allocatedService || "";
   const bahudaAllocatedService = searchResult.volunteer?.bahudaAllocatedService || "";
+  const lookupActiveServiceName = bahudaAllocatedService || (lookupContinueWithJagannath ? actualOrChosenService : "");
   const actualOrChosenServiceDetails = useMemo(
     () => services.find((service) => service.serviceName === actualOrChosenService) || null,
     [services, actualOrChosenService]
@@ -76,18 +78,19 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     () => services.find((service) => service.serviceName === bahudaAllocatedService) || null,
     [services, bahudaAllocatedService]
   );
-  const tshirtEligible = tshirtServiceNames.has(String(actualOrChosenService || "").trim());
+  const lookupActiveServiceDetails = useMemo(
+    () => services.find((service) => service.serviceName === lookupActiveServiceName) || null,
+    [services, lookupActiveServiceName]
+  );
+  const tshirtEligible = tshirtServiceNames.has(String(lookupActiveServiceName || "").trim());
   const tshirtAlreadyMarked = Boolean(searchResult.volunteer?.tshirt);
   const showLookupRegistrationForm = mode === "lookup" && lookupStage === "needsRegistration" && !searching;
-  const showLookupServiceChooser = mode === "lookup" && (
-    lookupStage === "needsService" ||
-    lookupStage === "registered" ||
-    lookupStage === "serviceMismatch"
-  );
-  const showLookupTshirtCard = mode === "lookup" && searchResult.found && searchResult.allocated && tshirtEligible && !tshirtAlreadyMarked && !serviceMismatch;
+  const showLookupFallbackPrompt = mode === "lookup" && lookupStage === "needsJagannathConfirmation";
+  const showLookupServiceChooser = mode === "lookup" && lookupStage === "serviceMismatch";
+  const showLookupTshirtCard = mode === "lookup" && searchResult.found && Boolean(lookupActiveServiceName) && tshirtEligible && !tshirtAlreadyMarked && !serviceMismatch;
   const showLookupDetails = mode === "lookup" && (
     searchResult.found &&
-    searchResult.allocated &&
+    Boolean(lookupActiveServiceName) &&
     !serviceMismatch &&
     (!tshirtEligible || tshirtAlreadyMarked)
   );
@@ -120,6 +123,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     setLookupSearched(false);
     setLookupStage("idle");
     setLookupServiceSelection("");
+    setLookupContinueWithJagannath(false);
     setServiceMismatch(false);
     setTshirtChecked(false);
     setSearchResult(emptySearchResult);
@@ -155,16 +159,22 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
       }));
       setTshirtChecked(Boolean(payload.data?.volunteer?.tshirt));
       if (payload.data?.found) {
-        setLookupStage(payload.data.allocated ? "allocated" : "needsService");
-        setLookupServiceSelection(payload.data?.volunteer?.allocatedService || "");
-        setMessage(
-          mode === "lookup" && !payload.data.allocated
-            ? "You have not been allocated any service yet. Please report at Service allocation desk."
-            : ""
-        );
+        setLookupServiceSelection(payload.data?.volunteer?.bahudaAllocatedService || "");
+        setLookupContinueWithJagannath(false);
+        if (payload.data?.volunteer?.bahudaAllocatedService) {
+          setLookupStage("allocated");
+          setMessage("");
+        } else if (payload.data?.volunteer?.allocatedService) {
+          setLookupStage("needsJagannathConfirmation");
+          setMessage("");
+        } else {
+          setLookupStage("needsService");
+          setMessage("You have not been allocated any service yet. Please report at Service allocation desk.");
+        }
       } else {
         setLookupStage("needsRegistration");
         setLookupServiceSelection("");
+        setLookupContinueWithJagannath(false);
         setServiceMismatch(false);
         setTshirtChecked(false);
         setForm({
@@ -246,6 +256,7 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
           serviceDetails: null
         });
         setLookupServiceSelection("");
+        setLookupContinueWithJagannath(false);
         setServiceMismatch(false);
         setTshirtChecked(false);
       } else {
@@ -328,6 +339,23 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
     } finally {
       setSearching(false);
     }
+  }
+
+  function continueWithJagannathService() {
+    if (!actualOrChosenService) {
+      setMessage("No service is allocated. Please report at Service allocation desk.");
+      return;
+    }
+    setLookupContinueWithJagannath(true);
+    setLookupStage("serviceSelected");
+    setTshirtChecked(Boolean(searchResult.volunteer?.tshirt));
+    setMessage("");
+  }
+
+  function rejectJagannathService() {
+    setLookupContinueWithJagannath(false);
+    setLookupStage("serviceDeclined");
+    setMessage("Please report at Service allocation desk.");
   }
 
   async function confirmTshirtCollection() {
@@ -428,6 +456,19 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <h2>Hare Krishna {searchResult.volunteer?.name || ""}</h2>
                 </div>
 
+                {showLookupFallbackPrompt ? (
+                  <div className="service-card tshirt-card">
+                    <h2>Jagannath Service Found</h2>
+                    <p className="subtle-dark">
+                      Your allocated service for Jagannatha Ratha Yatra happened on 16th July is - "{actualOrChosenService}". Do you want to continue with the same service?
+                    </p>
+                    <div className="row-actions">
+                      <button type="button" onClick={continueWithJagannathService}>Yes</button>
+                      <button type="button" onClick={rejectJagannathService} className="secondary">No</button>
+                    </div>
+                  </div>
+                ) : null}
+
                 {showLookupServiceChooser ? (
                   <div className="service-card tshirt-card">
                     <h2>After Allocation, Select Your Service</h2>
@@ -478,29 +519,29 @@ export default function VolunteerFlow({ mode, title, intro, actionLabel, success
                   <div className="service-card">
                     <h2>Your Allocated Service</h2>
                     <div className="service-grid service-grid-single lookup-service-grid">
-                      <div><span>Your Allocated Service</span><strong>{actualOrChosenService || "-"}</strong></div>
-                      {bahudaAllocatedService ? (
-                        <div><span>Your Bahuda Service</span><strong>{bahudaAllocatedService}</strong></div>
-                      ) : null}
+                      <div>
+                        <span>{bahudaAllocatedService ? "Your Bahuda Service" : "Your Jagannatha Ratha Yatra Service"}</span>
+                        <strong>{lookupActiveServiceName || "-"}</strong>
+                      </div>
                       <div className="coordinator-card">
                         <span>Your Service Coordinator Name</span>
                         <div className="coordinator-profile">
                           <div className="coordinator-photo-wrap">
-                            {actualOrChosenServiceDetails?.photoUrl ? (
+                            {lookupActiveServiceDetails?.photoUrl ? (
                               <img
                                 className="coordinator-photo"
-                                src={buildDriveImageUrl(actualOrChosenServiceDetails.photoUrl)}
-                                alt={actualOrChosenServiceDetails?.coordinatorName || "Coordinator photo"}
+                                src={buildDriveImageUrl(lookupActiveServiceDetails.photoUrl)}
+                                alt={lookupActiveServiceDetails?.coordinatorName || "Coordinator photo"}
                               />
                             ) : (
                               <div className="coordinator-photo coordinator-photo-placeholder">No Photo</div>
                             )}
                           </div>
-                          <strong>{actualOrChosenServiceDetails?.coordinatorName || "-"}</strong>
+                          <strong>{lookupActiveServiceDetails?.coordinatorName || "-"}</strong>
                         </div>
                       </div>
-                      <div><span>Your Service Coordinator Contact Number</span><strong>{actualOrChosenServiceDetails?.contactNumber || "-"}</strong></div>
-                      <div><span>Your Service Reporting Time</span><strong>{actualOrChosenServiceDetails?.reportingTime || "-"}</strong></div>
+                      <div><span>Your Service Coordinator Contact Number</span><strong>{lookupActiveServiceDetails?.contactNumber || "-"}</strong></div>
+                      <div><span>Your Service Reporting Time</span><strong>{lookupActiveServiceDetails?.reportingTime || "-"}</strong></div>
                     </div>
                   </div>
                 ) : null}
