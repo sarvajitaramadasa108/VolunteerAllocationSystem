@@ -22,9 +22,13 @@ export default function HomePage() {
           <h2>Event Day Lookup</h2>
           <p>Use on the event day to see the allocated service and coordinator details.</p>
         </Link>
-        <Link className="card-link" href="/dashboard">
-          <h2>Dashboard</h2>
-          <p>Download the volunteers allotted for any service.</p>
+        <Link className="card-link" href="/dashboard/festival">
+          <h2>Festival Master</h2>
+          <p>Create festivals, edit services, and set the active festival.</p>
+        </Link>
+        <Link className="card-link" href="/dashboard/registrations">
+          <h2>Registrations Dashboard</h2>
+          <p>View service-wise allotments and live registration activity.</p>
         </Link>
         <Link className="card-link" href="/allocate">
           <h2>Allocation Desk</h2>
